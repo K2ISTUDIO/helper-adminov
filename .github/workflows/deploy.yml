@@ -23,4 +23,5 @@ jobs:
           server-dir: public_html/adminov/
           include: |
             index.php
+            purge.php
           log-level: minimal
