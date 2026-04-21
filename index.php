@@ -11,7 +11,7 @@ define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
 define('APP_VERSION',        '4.5');
-define('LIST_CACHE_TTL',     120);
+define('LIST_CACHE_TTL',     600); // 10 minutes
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
@@ -69,13 +69,22 @@ set_error_handler(function($no, $msg, $file, $line) use ($_log) {
 
 session_start();
 
-// Route debug log (accessible uniquement si connecté)
-if (isset($_GET['showlog'])) {
-    session_start();
-    if (!empty($_SESSION['auth'])) {
-        header('Content-Type: text/plain');
-        echo file_exists($_log) ? file_get_contents($_log) : 'Log vide.';
-    }
+// Route debug (accessible uniquement si connecté : ?debug=1)
+if (isset($_GET['debug']) && !empty($_SESSION['auth'])) {
+    header('Content-Type: text/plain');
+    echo 'PHP: ' . PHP_VERSION . "\n";
+    echo 'PDO drivers: ' . implode(', ', PDO::getAvailableDrivers()) . "\n";
+    echo 'Session: OK' . "\n";
+    echo 'Cache emails: ' . (empty($_SESSION['accounts_cache']) ? 'vide' : count($_SESSION['accounts_cache']) . ' entrées') . "\n";
+    echo 'Cache age: ' . (isset($_SESSION['accounts_cache_ts']) ? (time() - $_SESSION['accounts_cache_ts']) . 's' : 'N/A') . "\n";
+    if (file_exists($_log)) echo "\n--- LOG ---\n" . file_get_contents($_log);
+    else echo "Log: vide\n";
+    exit;
+}
+// Lire log seul
+if (isset($_GET['showlog']) && !empty($_SESSION['auth'])) {
+    header('Content-Type: text/plain');
+    echo file_exists($_log) ? file_get_contents($_log) : 'Log vide.';
     exit;
 }
 
@@ -105,7 +114,7 @@ function ph_request(string $method, string $path, array $body = []): array
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_TIMEOUT        => 45,
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_HTTPHEADER     => [
             'X-API-USER: '    . PH_API_USER,
