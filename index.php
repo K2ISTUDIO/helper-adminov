@@ -6,12 +6,16 @@ define('PH_API_USER',   'ca090d4c75f80521945812f3968b3df9');
 define('PH_API_KEY',    'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
 define('MAIL_DOMAIN',   'neomails.fr');
 define('APP_PASSWORD',  'S@rix93100');
-define('APP_TITLE',     'Adminov — Emails neomails.fr'); // v2
+define('APP_TITLE',     'Adminov — Emails neomails.fr');
+define('APP_VERSION',   '3.2');
 define('PH_API_BASE',   'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID', 113185); // ID du compte N0C (mgpwvvnz)
 // DB stockée hors public_html pour sécurité
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
 // ============================================================
+
+// Vide l'OPcache pour ce fichier si disponible
+if (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
 
 session_start();
 
@@ -31,6 +35,7 @@ if (isset($_POST['app_logout'])) {
     exit;
 }
 $authenticated = !empty($_SESSION['auth']);
+$contacts      = []; // initialisé ici pour éviter tout problème de scope
 
 // ─── Client API PlanetHoster ──────────────────────────────
 function ph_request(string $method, string $path, array $body = []): array
@@ -318,6 +323,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
     <span class="navbar-brand">
       <i class="bi bi-envelope-at-fill me-2 opacity-75"></i><?= htmlspecialchars(APP_TITLE) ?>
       <span class="domain-badge ms-2"><?= htmlspecialchars(MAIL_DOMAIN) ?></span>
+      <span class="badge bg-secondary ms-2" style="font-size:.65rem;">v<?= APP_VERSION ?></span>
     </span>
     <form method="post" class="ms-auto">
       <button name="app_logout" value="1" class="btn btn-sm btn-outline-light px-3">
