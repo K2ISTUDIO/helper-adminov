@@ -199,7 +199,7 @@ try {
                 'password' => DEFAULT_EMAIL_PWD,
                 'quota'    => 250,
             ]);
-            if ($result['ok'] || str_contains(strtolower($result['error'] ?? ''), 'exist')) {
+            if ($result['ok'] || strpos(strtolower($result['error'] ?? ''), 'exist') !== false) {
                 $dberr = save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
                 unset($_SESSION['accounts_cache']);
                 if ($dberr) set_flash('danger', "Email créé mais erreur fiche : $dberr");
@@ -273,7 +273,7 @@ try {
         }
         redirect_self();
     }
-} catch (Throwable $e) {
+} catch (Exception $e) {
     set_flash('danger', 'Erreur PHP : ' . htmlspecialchars($e->getMessage()) . ' — ' . htmlspecialchars(basename($e->getFile())) . ':' . $e->getLine());
     redirect_self();
 }
