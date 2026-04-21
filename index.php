@@ -195,22 +195,11 @@ function save_contact(string $email, array $d): string
     }
 }
 
-// ─── Helpers flash (PRG) ──────────────────────────────────
-function set_flash(string $type, string $msg): void {
-    $_SESSION['flash'] = ['type' => $type, 'msg' => $msg];
-}
-function redirect_self(): void {
-    if (ob_get_level()) ob_end_clean(); // vide le buffer avant le header
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-    exit;
-}
-
 // ─── Actions POST ─────────────────────────────────────────
-$flash = $_SESSION['flash'] ?? ['type' => '', 'msg' => ''];
-unset($_SESSION['flash']);
+$flash = ['type' => '', 'msg' => ''];
 
-if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
-try {
+if ($authenticated) {
+
     $n0c_id = get_n0c_id();
     $action = $_POST['action'] ?? '';
 
@@ -227,9 +216,9 @@ try {
         $bic       = trim($_POST['bic']       ?? '');
 
         if (!$nom || !$prenom || !$prefix) {
-            set_flash('danger', 'Nom, prénom et identifiant email sont obligatoires.');
+            $flash = ['type' => 'danger', 'msg' => 'Nom, prénom et identifiant email sont obligatoires.'];
         } elseif (!preg_match('/^[a-zA-Z0-9._+\-]+$/', $prefix)) {
-            set_flash('danger', 'Identifiant email invalide (lettres, chiffres, . _ + - autorisés).');
+            $flash = ['type' => 'danger', 'msg' => 'Identifiant email invalide.'];
         } else {
             $full_email = $prefix . '@' . MAIL_DOMAIN;
             $result = ph_request('POST', '/hosting/email', [
@@ -242,20 +231,20 @@ try {
             if ($result['ok'] || strpos(strtolower($result['error'] ?? ''), 'exist') !== false) {
                 $dberr = save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
                 unset($_SESSION['accounts_cache']);
-                if ($dberr) set_flash('danger', "Email créé mais erreur fiche : $dberr");
-                else        set_flash('success', "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé.");
+                $flash = $dberr
+                    ? ['type' => 'danger',  'msg' => "Email créé mais erreur fiche : $dberr"]
+                    : ['type' => 'success', 'msg' => "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé."];
             } else {
-                set_flash('danger', 'Erreur création email : ' . htmlspecialchars($result['error']));
+                $flash = ['type' => 'danger', 'msg' => 'Erreur création email : ' . htmlspecialchars($result['error'])];
             }
         }
-        redirect_self();
     }
 
     // ── Supprimer un email ────────────────────────────────
     if ($action === 'delete') {
         $prefix = trim($_POST['prefix'] ?? '');
         if (!$prefix) {
-            set_flash('danger', 'Paramètre manquant.');
+            $flash = ['type' => 'danger', 'msg' => 'Paramètre manquant.'];
         } else {
             $result = ph_request('DELETE', '/hosting/email', [
                 'id'       => $n0c_id,
@@ -264,12 +253,11 @@ try {
             ]);
             if ($result['ok']) {
                 unset($_SESSION['accounts_cache']);
-                set_flash('success', "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée.");
+                $flash = ['type' => 'success', 'msg' => "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée."];
             } else {
-                set_flash('danger', 'Erreur API : ' . htmlspecialchars($result['error']));
+                $flash = ['type' => 'danger', 'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
             }
         }
-        redirect_self();
     }
 
     // ── Changer le mot de passe ───────────────────────────
@@ -277,9 +265,9 @@ try {
         $prefix   = trim($_POST['prefix']   ?? '');
         $password = trim($_POST['password'] ?? '');
         if (!$prefix || !$password) {
-            set_flash('danger', 'Tous les champs sont obligatoires.');
+            $flash = ['type' => 'danger', 'msg' => 'Tous les champs sont obligatoires.'];
         } elseif (strlen($password) < 8) {
-            set_flash('danger', 'Mot de passe trop court (8 caractères minimum).');
+            $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
         } else {
             $result = ph_request('PATCH', '/hosting/email', [
                 'id'       => $n0c_id,
@@ -287,11 +275,10 @@ try {
                 'mailUser' => $prefix,
                 'password' => $password,
             ]);
-            $result['ok']
-                ? set_flash('success', "Mot de passe de <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> modifié.")
-                : set_flash('danger',  'Erreur API : ' . htmlspecialchars($result['error']));
+            $flash = $result['ok']
+                ? ['type' => 'success', 'msg' => "Mot de passe de <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> modifié."]
+                : ['type' => 'danger',  'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
         }
-        redirect_self();
     }
 
     // ── Sauvegarder une fiche contact ─────────────────────
@@ -308,15 +295,11 @@ try {
                 'rib'       => trim($_POST['c_rib']       ?? ''),
                 'bic'       => trim($_POST['c_bic']       ?? ''),
             ]);
-            if ($dberr) set_flash('danger', "Erreur enregistrement : $dberr");
-            else        set_flash('success', "Fiche de <strong>{$cemail}</strong> enregistrée.");
+            $flash = $dberr
+                ? ['type' => 'danger',  'msg' => "Erreur enregistrement : $dberr"]
+                : ['type' => 'success', 'msg' => "Fiche de <strong>{$cemail}</strong> enregistrée."];
         }
-        redirect_self();
     }
-} catch (Exception $e) {
-    set_flash('danger', 'Erreur PHP : ' . htmlspecialchars($e->getMessage()) . ' — ' . htmlspecialchars(basename($e->getFile())) . ':' . $e->getLine());
-    redirect_self();
-}
 }
 
 // ─── Chargement données (GET uniquement) ──────────────────
