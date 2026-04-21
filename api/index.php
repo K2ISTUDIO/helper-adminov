@@ -157,8 +157,9 @@ if ($authenticated) {
     }
 
     // Charger la liste
-    $list_result = ph_request('GET', '/emails?domain=' . urlencode(MAIL_DOMAIN));
-    $accounts    = [];
+    $list_result  = ph_request('GET', '/emails?domain=' . urlencode(MAIL_DOMAIN));
+    $accounts     = [];
+    $list_raw_dbg = $list_result['data']; // debug
     if ($list_result['ok']) {
         $raw = $list_result['data'];
         if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
@@ -356,6 +357,14 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
             <?php else: ?>
               <p class="mb-0">Aucune adresse pour <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong>.</p>
             <?php endif; ?>
+          </div>
+          <!-- DEBUG — à retirer après diagnostic -->
+          <div class="px-3 pb-3">
+            <details>
+              <summary class="text-muted small" style="cursor:pointer;">Réponse brute API (debug)</summary>
+              <pre class="mt-2 p-2 bg-light rounded" style="font-size:.75rem;overflow:auto;max-height:300px;"><?= htmlspecialchars(json_encode($list_raw_dbg, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+              <p class="small text-muted mb-0">HTTP <?= $list_result['http'] ?> — ok: <?= $list_result['ok'] ? 'true' : 'false' ?></p>
+            </details>
           </div>
           <?php else: ?>
           <div class="table-responsive">
