@@ -8,51 +8,26 @@ define('MAIL_DOMAIN',  'neomails.fr');
 define('APP_PASSWORD', 'S@rix93100');
 define('APP_TITLE',    'Adminov — Emails neomails.fr');
 define('PH_API_BASE',  'https://api.planethoster.net/v3');
-define('SESSION_TTL',  3600); // 1 heure
 // ============================================================
 
-// ─── Auth HMAC stateless (compatible Vercel serverless) ───
-function auth_token(): string
-{
-    $window = (int)(time() / SESSION_TTL);
-    return hash_hmac('sha256', 'adminov:' . $window, APP_PASSWORD);
-}
-function is_authenticated(): bool
-{
-    $c = $_COOKIE['adminov_auth'] ?? '';
-    return $c !== '' && hash_equals(auth_token(), $c);
-}
-function set_auth_cookie(): void
-{
-    setcookie('adminov_auth', auth_token(), [
-        'expires'  => time() + SESSION_TTL,
-        'path'     => '/',
-        'secure'   => isset($_SERVER['HTTPS']),
-        'httponly' => true,
-        'samesite' => 'Strict',
-    ]);
-}
-function clear_auth_cookie(): void
-{
-    setcookie('adminov_auth', '', ['expires' => time() - 3600, 'path' => '/']);
-}
+session_start();
 
-// ─── Gestion login / logout ───────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['app_login'])) {
     if ($_POST['app_password'] === APP_PASSWORD) {
-        set_auth_cookie();
+        $_SESSION['auth'] = true;
         header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
         exit;
     }
     $auth_error = 'Mot de passe incorrect.';
 }
 if (isset($_POST['app_logout'])) {
-    clear_auth_cookie();
+    session_destroy();
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
     exit;
 }
-$authenticated = is_authenticated();
+$authenticated = !empty($_SESSION['auth']);
 
 // ─── Client API PlanetHoster ──────────────────────────────
 function ph_request(string $method, string $path, array $body = []): array
@@ -98,6 +73,7 @@ $flash = ['type' => '', 'msg' => ''];
 
 if ($authenticated) {
 
+    // Créer un email
     if (($_POST['action'] ?? '') === 'create') {
         $prefix   = trim($_POST['prefix']   ?? '');
         $password = trim($_POST['password'] ?? '');
@@ -122,6 +98,7 @@ if ($authenticated) {
         }
     }
 
+    // Supprimer un email
     if (($_POST['action'] ?? '') === 'delete') {
         $prefix = trim($_POST['prefix'] ?? '');
         if (!$prefix) {
@@ -137,6 +114,7 @@ if ($authenticated) {
         }
     }
 
+    // Changer le mot de passe
     if (($_POST['action'] ?? '') === 'passwd') {
         $prefix   = trim($_POST['prefix']   ?? '');
         $password = trim($_POST['password'] ?? '');
@@ -156,17 +134,19 @@ if ($authenticated) {
         }
     }
 
-    // Charger la liste
+    // Charger la liste des emails
     $list_result = ph_request('GET', '/emails?domain=' . urlencode(MAIL_DOMAIN));
     $accounts    = [];
     if ($list_result['ok']) {
         $raw = $list_result['data'];
-        if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
+        // Normalise selon la structure retournée par l'API
+        if (isset($raw['data']) && is_array($raw['data']))        $accounts = $raw['data'];
         elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
         elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
     }
 }
 
+// ─── Génération mot de passe fort ─────────────────────────
 function strong_password(int $len = 16): string
 {
     $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
@@ -188,11 +168,15 @@ $suggested = strong_password();
 :root { --brand:#0e6adb; --brand-dark:#0a55b3; --surface:#f4f7ff; }
 *, ::before, ::after { box-sizing: border-box; }
 body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+
+/* ── Login ── */
 .login-wrap { display:flex; align-items:center; justify-content:center; min-height:100vh; }
 .login-card  { width:100%; max-width:400px; border:none; border-radius:16px;
                box-shadow:0 4px 32px rgba(14,106,219,.15); padding:2.5rem 2rem; background:#fff; }
 .login-logo  { font-size:2rem; font-weight:800; color:var(--brand); letter-spacing:-.03em; }
 .login-sub   { color:#6b7280; font-size:.9rem; }
+
+/* ── App ── */
 .navbar-brand { font-weight:700; font-size:1.1rem; }
 .card { border:none; border-radius:14px; box-shadow:0 2px 16px rgba(0,0,0,.07); }
 .card-header { border-radius:14px 14px 0 0 !important; font-weight:600; font-size:.95rem; }
@@ -203,6 +187,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 .table th { font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:#9ca3af; border-bottom-width:1px; }
 .table td { vertical-align:middle; }
 .email-col { font-family:'Cascadia Code','Fira Code',monospace; font-size:.9rem; }
+.quota-badge { font-size:.73rem; }
 .copy-icon { opacity:.45; transition:opacity .15s; cursor:pointer; }
 .copy-icon:hover { opacity:1; }
 .empty-state { padding:3rem 1rem; text-align:center; color:#9ca3af; }
@@ -214,6 +199,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 <body>
 <?php if (!$authenticated): ?>
 
+<!-- ══════════════════════ LOGIN ══════════════════════════ -->
 <div class="login-wrap">
   <div class="login-card">
     <div class="text-center mb-4">
@@ -240,6 +226,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
 <?php else: ?>
 
+<!-- ══════════════════════ APP ════════════════════════════ -->
 <nav class="navbar navbar-dark" style="background:var(--brand); box-shadow:0 2px 8px rgba(14,106,219,.3);">
   <div class="container-xl">
     <span class="navbar-brand">
@@ -256,6 +243,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
 <div class="container-xl py-4">
 
+  <!-- Flash -->
   <?php if ($flash['msg']): ?>
   <div class="alert alert-<?= $flash['type'] ?> alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
     <i class="bi bi-<?= $flash['type'] === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill' ?> flex-shrink-0"></i>
@@ -266,8 +254,10 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
   <div class="row g-4">
 
+    <!-- ──────── Colonne gauche : formulaires ──────── -->
     <div class="col-xl-4 col-lg-5">
 
+      <!-- Créer -->
       <div class="card">
         <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
           <i class="bi bi-plus-circle-fill"></i> Créer une adresse email
@@ -275,6 +265,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
         <div class="card-body">
           <form method="post" autocomplete="off">
             <input type="hidden" name="action" value="create">
+
             <div class="mb-3">
               <label class="form-label fw-semibold">Préfixe <span class="text-danger">*</span></label>
               <div class="input-group">
@@ -283,6 +274,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                 <span class="input-group-text text-muted">@<?= htmlspecialchars(MAIL_DOMAIN) ?></span>
               </div>
             </div>
+
             <div class="mb-3">
               <label class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
               <div class="input-group">
@@ -297,11 +289,13 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               </div>
               <div class="form-text">Minimum 8 caractères</div>
             </div>
+
             <div class="mb-4">
               <label class="form-label fw-semibold">Quota (Mo)</label>
               <input type="number" name="quota" class="form-control" value="250" min="0" max="51200">
               <div class="form-text">0 = illimité</div>
             </div>
+
             <button type="submit" class="btn btn-brand w-100 fw-semibold">
               <i class="bi bi-envelope-plus me-1"></i>Créer l'adresse
             </button>
@@ -309,6 +303,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
         </div>
       </div>
 
+      <!-- Changer mot de passe -->
       <div class="card mt-4">
         <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
           <i class="bi bi-key-fill"></i> Changer un mot de passe
@@ -337,8 +332,10 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
           </form>
         </div>
       </div>
-    </div>
 
+    </div><!-- /col gauche -->
+
+    <!-- ──────── Colonne droite : liste ──────── -->
     <div class="col-xl-8 col-lg-7">
       <div class="card">
         <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
@@ -354,7 +351,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               <p class="mb-0">Impossible de charger la liste.</p>
               <small class="text-danger"><?= htmlspecialchars($list_result['error'] ?? '') ?></small>
             <?php else: ?>
-              <p class="mb-0">Aucune adresse pour <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong>.</p>
+              <p class="mb-0">Aucune adresse email pour <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong>.</p>
             <?php endif; ?>
           </div>
           <?php else: ?>
@@ -370,23 +367,29 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               </thead>
               <tbody>
                 <?php foreach ($accounts as $acc):
-                    $prefix_val  = $acc['email'] ?? $acc['login'] ?? $acc['username'] ?? $acc['prefix'] ?? '—';
-                    $quota_val   = $acc['quota']  ?? $acc['quota_mb'] ?? $acc['diskquota'] ?? '?';
-                    $used_val    = $acc['disk_used'] ?? $acc['diskused'] ?? $acc['used'] ?? null;
-                    $full_email  = strpos($prefix_val, '@') !== false ? $prefix_val : $prefix_val . '@' . MAIL_DOMAIN;
+                    // Normalise les champs selon la structure API
+                    $prefix_val = $acc['email']    ?? $acc['login']    ?? $acc['username'] ?? $acc['prefix'] ?? '—';
+                    $quota_val  = $acc['quota']     ?? $acc['quota_mb'] ?? $acc['diskquota'] ?? '?';
+                    $used_val   = $acc['disk_used'] ?? $acc['diskused'] ?? $acc['used']      ?? null;
+                    $full_email = (strpos($prefix_val, '@') !== false)
+                        ? $prefix_val
+                        : $prefix_val . '@' . MAIL_DOMAIN;
                     $prefix_only = strstr($full_email, '@', true) ?: $prefix_val;
-                    $qlabel      = ($quota_val == 0 || $quota_val === '∞' || $quota_val === 'unlimited')
-                        ? '<span class="badge bg-success">Illimité</span>'
+                    $quota_label = ($quota_val == 0 || $quota_val === '∞' || $quota_val === 'unlimited')
+                        ? '<span class="badge bg-success quota-badge">Illimité</span>'
                         : '<span class="text-muted">' . htmlspecialchars((string)$quota_val) . ' Mo</span>';
                 ?>
                 <tr>
                   <td class="email-col">
                     <?= htmlspecialchars($full_email) ?>
                     <i class="bi bi-clipboard copy-icon ms-1"
-                       data-copy-val="<?= htmlspecialchars($full_email) ?>" title="Copier"></i>
+                       data-copy-val="<?= htmlspecialchars($full_email) ?>"
+                       title="Copier"></i>
                   </td>
-                  <td><?= $qlabel ?></td>
-                  <td class="text-muted"><?= $used_val !== null ? htmlspecialchars(round((float)$used_val, 1)) . ' Mo' : '—' ?></td>
+                  <td><?= $quota_label ?></td>
+                  <td class="text-muted">
+                    <?= $used_val !== null ? htmlspecialchars(round((float)$used_val, 1)) . ' Mo' : '—' ?>
+                  </td>
                   <td class="text-center">
                     <button class="btn btn-sm btn-outline-danger"
                             onclick="confirmDelete('<?= htmlspecialchars($prefix_only, ENT_QUOTES) ?>','<?= htmlspecialchars($full_email, ENT_QUOTES) ?>')"
@@ -403,6 +406,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
         </div>
       </div>
 
+      <!-- Infos API -->
       <div class="card mt-4">
         <div class="card-header bg-secondary text-white d-flex align-items-center gap-2">
           <i class="bi bi-plug-fill"></i> Informations API
@@ -424,11 +428,12 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
           </div>
         </div>
       </div>
-    </div>
 
+    </div><!-- /col droite -->
   </div>
 </div>
 
+<!-- Modal suppression -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 rounded-4 overflow-hidden">
@@ -441,7 +446,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
       <div class="modal-body py-4">
         <p class="mb-1">Supprimer définitivement :</p>
         <p class="fw-semibold font-monospace fs-5 mb-1" id="del-display"></p>
-        <small class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>Tous les emails seront perdus, action irréversible.</small>
+        <small class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>Tous les emails seront perdus et cette action est irréversible.</small>
       </div>
       <div class="modal-footer border-0 bg-light">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -461,12 +466,14 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Copie presse-papier — boutons data-copy (id de champ)
 document.querySelectorAll('[data-copy]').forEach(btn => {
   btn.addEventListener('click', () => {
     const el = document.getElementById(btn.dataset.copy);
     if (el) copyText(el.value, btn);
   });
 });
+// Copie presse-papier — icônes data-copy-val (valeur directe)
 document.querySelectorAll('[data-copy-val]').forEach(el => {
   el.style.cursor = 'pointer';
   el.addEventListener('click', () => copyText(el.dataset.copyVal, el));
@@ -478,6 +485,8 @@ function copyText(text, el) {
     setTimeout(() => { el.className = prev; }, 1500);
   });
 }
+
+// Regénérer mot de passe fort
 const CHARS = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
 function genPwd(n = 16) {
   const arr = new Uint32Array(n);
@@ -487,8 +496,10 @@ function genPwd(n = 16) {
 document.getElementById('regenBtn')?.addEventListener('click', () => {
   document.getElementById('pwd-create').value = genPwd();
 });
+
+// Modal suppression
 function confirmDelete(prefix, fullEmail) {
-  document.getElementById('del-prefix').value        = prefix;
+  document.getElementById('del-prefix').value       = prefix;
   document.getElementById('del-display').textContent = fullEmail;
   new bootstrap.Modal(document.getElementById('deleteModal')).show();
 }
