@@ -143,15 +143,26 @@ function save_contact(string $email, array $d): void
                $d['bic'] ?? '', date('Y-m-d H:i:s')]);
 }
 
-// ─── Actions POST ─────────────────────────────────────────
-$flash = ['type' => '', 'msg' => ''];
+// ─── Helpers flash (PRG) ──────────────────────────────────
+function set_flash(string $type, string $msg): void {
+    $_SESSION['flash'] = ['type' => $type, 'msg' => $msg];
+}
+function redirect_self(): never {
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+    exit;
+}
 
-if ($authenticated) {
+// ─── Actions POST ─────────────────────────────────────────
+$flash = $_SESSION['flash'] ?? ['type' => '', 'msg' => ''];
+unset($_SESSION['flash']);
+
+if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $n0c_id = get_n0c_id();
+    $action = $_POST['action'] ?? '';
 
     // ── Intégrer un nouveau bénéficiaire (email + fiche) ──
-    if (($_POST['action'] ?? '') === 'onboard') {
+    if ($action === 'onboard') {
         $nom       = trim($_POST['nom']       ?? '');
         $prenom    = trim($_POST['prenom']    ?? '');
         $prefix    = trim($_POST['prefix']    ?? '');
@@ -160,14 +171,14 @@ if ($authenticated) {
         $pays      = trim($_POST['pays']      ?? '');
         $adresse   = trim($_POST['adresse']   ?? '');
         $rib       = trim($_POST['rib']       ?? '');
+        $bic       = trim($_POST['bic']       ?? '');
 
         if (!$nom || !$prenom || !$prefix) {
-            $flash = ['type' => 'danger', 'msg' => 'Nom, prénom et identifiant email sont obligatoires.'];
+            set_flash('danger', 'Nom, prénom et identifiant email sont obligatoires.');
         } elseif (!preg_match('/^[a-zA-Z0-9._+\-]+$/', $prefix)) {
-            $flash = ['type' => 'danger', 'msg' => 'Identifiant email invalide (lettres, chiffres, . _ + - autorisés).'];
+            set_flash('danger', 'Identifiant email invalide (lettres, chiffres, . _ + - autorisés).');
         } else {
             $full_email = $prefix . '@' . MAIL_DOMAIN;
-            $bic = trim($_POST['bic'] ?? '');
             $result = ph_request('POST', '/hosting/email', [
                 'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
@@ -176,49 +187,41 @@ if ($authenticated) {
                 'quota'    => 250,
             ]);
             if ($result['ok'] || str_contains(strtolower($result['error'] ?? ''), 'exist')) {
-                save_contact($full_email, [
-                    'nom'       => $nom,
-                    'prenom'    => $prenom,
-                    'naissance' => $naissance,
-                    'adresse'   => $adresse,
-                    'pays'      => $pays,
-                    'telephone' => $telephone,
-                    'rib'       => $rib,
-                    'bic'       => $bic,
-                ]);
-                $flash = ['type' => 'success', 'msg' =>
-                    "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé avec le mot de passe par défaut."];
+                save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
+                set_flash('success', "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé.");
             } else {
-                $flash = ['type' => 'danger', 'msg' => 'Erreur création email : ' . htmlspecialchars($result['error'])];
+                set_flash('danger', 'Erreur création email : ' . htmlspecialchars($result['error']));
             }
         }
+        redirect_self();
     }
 
     // ── Supprimer un email ────────────────────────────────
-    if (($_POST['action'] ?? '') === 'delete') {
+    if ($action === 'delete') {
         $prefix = trim($_POST['prefix'] ?? '');
         if (!$prefix) {
-            $flash = ['type' => 'danger', 'msg' => 'Paramètre manquant.'];
+            set_flash('danger', 'Paramètre manquant.');
         } else {
             $result = ph_request('DELETE', '/hosting/email', [
                 'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
                 'mailUser' => $prefix,
             ]);
-            $flash = $result['ok']
-                ? ['type' => 'success', 'msg' => "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée."]
-                : ['type' => 'danger',  'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
+            $result['ok']
+                ? set_flash('success', "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée.")
+                : set_flash('danger',  'Erreur API : ' . htmlspecialchars($result['error']));
         }
+        redirect_self();
     }
 
     // ── Changer le mot de passe ───────────────────────────
-    if (($_POST['action'] ?? '') === 'passwd') {
+    if ($action === 'passwd') {
         $prefix   = trim($_POST['prefix']   ?? '');
         $password = trim($_POST['password'] ?? '');
         if (!$prefix || !$password) {
-            $flash = ['type' => 'danger', 'msg' => 'Tous les champs sont obligatoires.'];
+            set_flash('danger', 'Tous les champs sont obligatoires.');
         } elseif (strlen($password) < 8) {
-            $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
+            set_flash('danger', 'Mot de passe trop court (8 caractères minimum).');
         } else {
             $result = ph_request('PATCH', '/hosting/email', [
                 'id'       => $n0c_id,
@@ -226,14 +229,15 @@ if ($authenticated) {
                 'mailUser' => $prefix,
                 'password' => $password,
             ]);
-            $flash = $result['ok']
-                ? ['type' => 'success', 'msg' => "Mot de passe de <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> modifié."]
-                : ['type' => 'danger',  'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
+            $result['ok']
+                ? set_flash('success', "Mot de passe de <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> modifié.")
+                : set_flash('danger',  'Erreur API : ' . htmlspecialchars($result['error']));
         }
+        redirect_self();
     }
 
     // ── Sauvegarder une fiche contact ─────────────────────
-    if (($_POST['action'] ?? '') === 'save_contact') {
+    if ($action === 'save_contact') {
         $cemail = trim($_POST['c_email'] ?? '');
         if ($cemail) {
             save_contact($cemail, [
@@ -246,20 +250,24 @@ if ($authenticated) {
                 'rib'       => trim($_POST['c_rib']       ?? ''),
                 'bic'       => trim($_POST['c_bic']       ?? ''),
             ]);
-            $flash = ['type' => 'success', 'msg' => "Fiche de <strong>{$cemail}</strong> enregistrée."];
+            set_flash('success', "Fiche de <strong>{$cemail}</strong> enregistrée.");
         }
+        redirect_self();
     }
+}
 
-    // ── Charger la liste des emails ───────────────────────
+// ─── Chargement données (GET uniquement) ──────────────────
+$list_result = ['ok' => false, 'error' => '', 'data' => []];
+$accounts    = [];
+if ($authenticated) {
+    $n0c_id      = get_n0c_id();
     $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
-    $accounts    = [];
     if ($list_result['ok']) {
         $raw = $list_result['data'];
         if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
         elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
         elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
     }
-
     $contacts = load_contacts();
 }
 
