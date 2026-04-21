@@ -8,7 +8,7 @@ define('MAIL_DOMAIN',        'neomails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
-define('APP_VERSION',        '4.1');
+define('APP_VERSION',        '4.2');
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
@@ -117,6 +117,7 @@ function get_db(): PDO
         pays         TEXT DEFAULT '',
         telephone    TEXT DEFAULT '',
         rib          TEXT DEFAULT '',
+        bic          TEXT DEFAULT '',
         updated_at   TEXT DEFAULT ''
     )");
     return $db;
@@ -135,11 +136,11 @@ function load_contacts(): array
 function save_contact(string $email, array $d): void
 {
     get_db()->prepare("INSERT OR REPLACE INTO contacts
-        (email,nom,prenom,naissance,adresse,pays,telephone,rib,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?)")
+        (email,nom,prenom,naissance,adresse,pays,telephone,rib,bic,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)")
     ->execute([$email, $d['nom'], $d['prenom'], $d['naissance'],
                $d['adresse'], $d['pays'], $d['telephone'], $d['rib'],
-               date('Y-m-d H:i:s')]);
+               $d['bic'] ?? '', date('Y-m-d H:i:s')]);
 }
 
 // ─── Actions POST ─────────────────────────────────────────
@@ -166,6 +167,7 @@ if ($authenticated) {
             $flash = ['type' => 'danger', 'msg' => 'Identifiant email invalide (lettres, chiffres, . _ + - autorisés).'];
         } else {
             $full_email = $prefix . '@' . MAIL_DOMAIN;
+            $bic = trim($_POST['bic'] ?? '');
             $result = ph_request('POST', '/hosting/email', [
                 'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
@@ -182,6 +184,7 @@ if ($authenticated) {
                     'pays'      => $pays,
                     'telephone' => $telephone,
                     'rib'       => $rib,
+                    'bic'       => $bic,
                 ]);
                 $flash = ['type' => 'success', 'msg' =>
                     "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé avec le mot de passe par défaut."];
@@ -241,6 +244,7 @@ if ($authenticated) {
                 'pays'      => trim($_POST['c_pays']      ?? ''),
                 'telephone' => trim($_POST['c_telephone'] ?? ''),
                 'rib'       => trim($_POST['c_rib']       ?? ''),
+                'bic'       => trim($_POST['c_bic']       ?? ''),
             ]);
             $flash = ['type' => 'success', 'msg' => "Fiche de <strong>{$cemail}</strong> enregistrée."];
         }
@@ -451,11 +455,18 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               <div class="form-text">Cliquez <i class="bi bi-shuffle"></i> pour une adresse IDF aléatoire</div>
             </div>
 
-            <!-- RIB -->
-            <div class="mb-3">
-              <label class="form-label fw-semibold mb-1">RIB</label>
-              <input type="text" name="rib" id="f-rib" class="form-control font-monospace"
-                     placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+            <!-- RIB + BIC -->
+            <div class="row g-2 mb-3">
+              <div class="col-8">
+                <label class="form-label fw-semibold mb-1">RIB</label>
+                <input type="text" name="rib" id="f-rib" class="form-control font-monospace"
+                       placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+              </div>
+              <div class="col-4">
+                <label class="form-label fw-semibold mb-1">BIC</label>
+                <input type="text" name="bic" id="f-bic" class="form-control font-monospace"
+                       placeholder="BNPAFRPP">
+              </div>
             </div>
 
             <button type="submit" class="btn btn-brand w-100 fw-semibold py-2">
@@ -610,10 +621,15 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content border-0 rounded-4 overflow-hidden">
       <div class="modal-header text-white border-0" style="background:var(--brand);">
-        <h5 class="modal-title fw-semibold">
-          <i class="bi bi-person-vcard-fill me-2"></i>Fiche contact — <span id="c-title"></span>
+        <h5 class="modal-title fw-semibold d-flex align-items-center gap-2 flex-wrap">
+          <i class="bi bi-person-vcard-fill"></i>
+          <span id="c-title"></span>
+          <button type="button" id="copy-email-btn"
+                  class="btn btn-sm btn-light px-2 py-0" style="font-size:.75rem;" title="Copier l'email">
+            <i class="bi bi-clipboard me-1"></i><span>Copier</span>
+          </button>
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
       </div>
       <form method="post">
         <input type="hidden" name="action"  value="save_contact">
@@ -644,10 +660,15 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               <label class="form-label fw-semibold">Téléphone</label>
               <input type="tel" name="c_telephone" id="c_telephone" class="form-control" placeholder="+33 6 00 00 00 00">
             </div>
-            <div class="col-sm-6">
+            <div class="col-sm-4">
               <label class="form-label fw-semibold">RIB</label>
               <input type="text" name="c_rib" id="c_rib" class="form-control font-monospace"
                      placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+            </div>
+            <div class="col-sm-2">
+              <label class="form-label fw-semibold">BIC</label>
+              <input type="text" name="c_bic" id="c_bic" class="form-control font-monospace"
+                     placeholder="BNPAFRPP">
             </div>
           </div>
         </div>
@@ -745,7 +766,8 @@ function copyText(text, el) {
 
 // ── Modal fiche contact ────────────────────────────────────
 function openContact(data) {
-  document.getElementById('c_email').value      = data.email     || '';
+  const email = data.email || '';
+  document.getElementById('c_email').value      = email;
   document.getElementById('c_nom').value        = data.nom       || '';
   document.getElementById('c_prenom').value     = data.prenom    || '';
   document.getElementById('c_naissance').value  = data.naissance || '';
@@ -753,7 +775,18 @@ function openContact(data) {
   document.getElementById('c_adresse').value    = data.adresse   || '';
   document.getElementById('c_telephone').value  = data.telephone || '';
   document.getElementById('c_rib').value        = data.rib       || '';
-  document.getElementById('c-title').textContent = data.email   || '';
+  document.getElementById('c_bic').value        = data.bic       || '';
+  document.getElementById('c-title').textContent = email;
+
+  // Bouton copie email
+  const copyBtn = document.getElementById('copy-email-btn');
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(email).then(() => {
+      copyBtn.innerHTML = '<i class="bi bi-clipboard-check me-1"></i><span>Copié !</span>';
+      setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i><span>Copier</span>'; }, 1800);
+    });
+  };
+
   new bootstrap.Modal(document.getElementById('contactModal')).show();
 }
 
