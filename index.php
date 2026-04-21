@@ -8,7 +8,7 @@ define('MAIL_DOMAIN',        'neomails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
-define('APP_VERSION',        '4.2');
+define('APP_VERSION',        '4.3');
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
@@ -358,11 +358,16 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
       <span class="domain-badge ms-2"><?= htmlspecialchars(MAIL_DOMAIN) ?></span>
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;">v<?= APP_VERSION ?></span>
     </span>
-    <form method="post" class="ms-auto">
-      <button name="app_logout" value="1" class="btn btn-sm btn-outline-light px-3">
-        <i class="bi bi-box-arrow-right me-1"></i>Déconnexion
-      </button>
-    </form>
+    <div class="ms-auto d-flex gap-2">
+      <a href="https://neomails.fr/webmail/" target="_blank" class="btn btn-sm btn-light px-3">
+        <i class="bi bi-envelope-open-fill me-1"></i>Webmail
+      </a>
+      <form method="post">
+        <button name="app_logout" value="1" class="btn btn-sm btn-outline-light px-3">
+          <i class="bi bi-box-arrow-right me-1"></i>Déconnexion
+        </button>
+      </form>
+    </div>
   </div>
 </nav>
 
@@ -554,7 +559,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                   <th>Adresse</th>
                   <th>Quota</th>
                   <th>Utilisé</th>
-                  <th class="text-center" style="width:90px;">Actions</th>
+                  <th class="text-center" style="width:130px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -593,6 +598,10 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                             title="<?= $has_contact ? 'Voir / modifier la fiche' : 'Créer la fiche' ?>">
                       <i class="bi bi-person<?= $has_contact ? '-fill' : '' ?>"></i>
                     </button>
+                    <a href="https://neomails.fr/webmail/" target="_blank"
+                       class="btn btn-sm btn-outline-primary me-1" title="Ouvrir le webmail">
+                      <i class="bi bi-envelope-open"></i>
+                    </a>
                     <button class="btn btn-sm btn-outline-danger"
                             onclick="confirmDelete('<?= htmlspecialchars($prefix_only, ENT_QUOTES) ?>','<?= htmlspecialchars($full_email, ENT_QUOTES) ?>')"
                             title="Supprimer">
