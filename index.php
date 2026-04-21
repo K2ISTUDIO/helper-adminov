@@ -1,4 +1,5 @@
 <?php
+ob_start(); // buffer toute sortie — évite "headers already sent"
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
 // ============================================================
@@ -199,6 +200,7 @@ function set_flash(string $type, string $msg): void {
     $_SESSION['flash'] = ['type' => $type, 'msg' => $msg];
 }
 function redirect_self(): void {
+    if (ob_get_level()) ob_end_clean(); // vide le buffer avant le header
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
     exit;
 }
