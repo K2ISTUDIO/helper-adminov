@@ -45,10 +45,39 @@ const IDF_ADDRESSES = [
 ];
 // ============================================================
 
-// Vide l'OPcache pour ce fichier si disponible
 if (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
 
+// Log toutes les erreurs fatales dans un fichier accessible
+$_log = __DIR__ . '/adminov_debug.log';
+register_shutdown_function(function() use ($_log) {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+        file_put_contents($_log,
+            date('Y-m-d H:i:s') . ' [FATAL] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line'] . "\n"
+            . 'POST: ' . json_encode($_POST) . "\n\n",
+            FILE_APPEND);
+    }
+});
+set_error_handler(function($no, $msg, $file, $line) use ($_log) {
+    if ($no & (E_ERROR | E_USER_ERROR)) {
+        file_put_contents($_log,
+            date('Y-m-d H:i:s') . ' [ERR ' . $no . '] ' . $msg . ' in ' . $file . ':' . $line . "\n",
+            FILE_APPEND);
+    }
+    return false;
+});
+
 session_start();
+
+// Route debug log (accessible uniquement si connecté)
+if (isset($_GET['showlog'])) {
+    session_start();
+    if (!empty($_SESSION['auth'])) {
+        header('Content-Type: text/plain');
+        echo file_exists($_log) ? file_get_contents($_log) : 'Log vide.';
+    }
+    exit;
+}
 
 // ─── Auth ─────────────────────────────────────────────────
 $auth_error = '';

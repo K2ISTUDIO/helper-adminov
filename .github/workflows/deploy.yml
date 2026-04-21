@@ -23,6 +23,6 @@ jobs:
           server-dir: public_html/adminov/
           include: |
             index.php
-            purge.php
+            info.php
           log-level: verbose
           force-upload: true
