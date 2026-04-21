@@ -121,6 +121,11 @@ function get_db(): PDO
         bic          TEXT DEFAULT '',
         updated_at   TEXT DEFAULT ''
     )");
+    // Migration : ajoute bic si la table existait avant
+    $cols = array_column($db->query("PRAGMA table_info(contacts)")->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if (!in_array('bic', $cols)) {
+        $db->exec("ALTER TABLE contacts ADD COLUMN bic TEXT DEFAULT ''");
+    }
     return $db;
 }
 
@@ -134,14 +139,19 @@ function load_contacts(): array
     } catch (Exception $e) { return []; }
 }
 
-function save_contact(string $email, array $d): void
+function save_contact(string $email, array $d): string
 {
-    get_db()->prepare("INSERT OR REPLACE INTO contacts
-        (email,nom,prenom,naissance,adresse,pays,telephone,rib,bic,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)")
-    ->execute([$email, $d['nom'], $d['prenom'], $d['naissance'],
-               $d['adresse'], $d['pays'], $d['telephone'], $d['rib'],
-               $d['bic'] ?? '', date('Y-m-d H:i:s')]);
+    try {
+        get_db()->prepare("INSERT OR REPLACE INTO contacts
+            (email,nom,prenom,naissance,adresse,pays,telephone,rib,bic,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$email, $d['nom'] ?? '', $d['prenom'] ?? '', $d['naissance'] ?? '',
+                   $d['adresse'] ?? '', $d['pays'] ?? '', $d['telephone'] ?? '',
+                   $d['rib'] ?? '', $d['bic'] ?? '', date('Y-m-d H:i:s')]);
+        return '';
+    } catch (Exception $e) {
+        return $e->getMessage();
+    }
 }
 
 // ─── Helpers flash (PRG) ──────────────────────────────────
@@ -188,9 +198,10 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'quota'    => 250,
             ]);
             if ($result['ok'] || str_contains(strtolower($result['error'] ?? ''), 'exist')) {
-                save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
+                $dberr = save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
                 unset($_SESSION['accounts_cache']);
-                set_flash('success', "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé.");
+                if ($dberr) set_flash('danger', "Email créé mais erreur fiche : $dberr");
+                else        set_flash('success', "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé.");
             } else {
                 set_flash('danger', 'Erreur création email : ' . htmlspecialchars($result['error']));
             }
@@ -245,7 +256,7 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_contact') {
         $cemail = trim($_POST['c_email'] ?? '');
         if ($cemail) {
-            save_contact($cemail, [
+            $dberr = save_contact($cemail, [
                 'nom'       => trim($_POST['c_nom']       ?? ''),
                 'prenom'    => trim($_POST['c_prenom']    ?? ''),
                 'naissance' => trim($_POST['c_naissance'] ?? ''),
@@ -255,7 +266,8 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'rib'       => trim($_POST['c_rib']       ?? ''),
                 'bic'       => trim($_POST['c_bic']       ?? ''),
             ]);
-            set_flash('success', "Fiche de <strong>{$cemail}</strong> enregistrée.");
+            if ($dberr) set_flash('danger', "Erreur enregistrement : $dberr");
+            else        set_flash('success', "Fiche de <strong>{$cemail}</strong> enregistrée.");
         }
         redirect_self();
     }
