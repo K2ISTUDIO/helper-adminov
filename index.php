@@ -302,17 +302,19 @@ if ($authenticated) {
     }
 }
 
-// ─── Chargement données (GET uniquement) ──────────────────
+// ─── Chargement données ───────────────────────────────────
 $list_result = ['ok' => false, 'error' => '', 'data' => []];
 $accounts    = [];
 if ($authenticated) {
-    $n0c_id = get_n0c_id();
-
-    // Cache session 2 minutes pour éviter de recharger 700+ emails à chaque clic
-    $cache_ok  = !empty($_SESSION['accounts_cache'])
-                 && isset($_SESSION['accounts_cache_ts'])
-                 && (time() - $_SESSION['accounts_cache_ts']) < LIST_CACHE_TTL
-                 && empty($_GET['refresh']);
+    // Sur une requête POST : toujours utiliser le cache existant (jamais d'appel API)
+    // Sur GET : recharger si cache expiré
+    $is_post  = ($_SERVER['REQUEST_METHOD'] === 'POST');
+    $cache_ok = !empty($_SESSION['accounts_cache'])
+                && ($is_post || (
+                    isset($_SESSION['accounts_cache_ts'])
+                    && (time() - $_SESSION['accounts_cache_ts']) < LIST_CACHE_TTL
+                    && empty($_GET['refresh'])
+                ));
 
     if ($cache_ok) {
         $accounts    = $_SESSION['accounts_cache'];
@@ -324,7 +326,6 @@ if ($authenticated) {
             if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
             elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
             elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
-            // Mise en cache
             $_SESSION['accounts_cache']    = $accounts;
             $_SESSION['accounts_cache_ts'] = time();
         }
