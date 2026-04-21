@@ -8,7 +8,8 @@ define('MAIL_DOMAIN',        'neomails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
-define('APP_VERSION',        '4.3');
+define('APP_VERSION',        '4.5');
+define('LIST_CACHE_TTL',     120);
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
@@ -147,7 +148,7 @@ function save_contact(string $email, array $d): void
 function set_flash(string $type, string $msg): void {
     $_SESSION['flash'] = ['type' => $type, 'msg' => $msg];
 }
-function redirect_self(): never {
+function redirect_self(): void {
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
     exit;
 }
@@ -188,6 +189,7 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             if ($result['ok'] || str_contains(strtolower($result['error'] ?? ''), 'exist')) {
                 save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
+                unset($_SESSION['accounts_cache']);
                 set_flash('success', "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé.");
             } else {
                 set_flash('danger', 'Erreur création email : ' . htmlspecialchars($result['error']));
@@ -207,9 +209,12 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'domain'   => MAIL_DOMAIN,
                 'mailUser' => $prefix,
             ]);
-            $result['ok']
-                ? set_flash('success', "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée.")
-                : set_flash('danger',  'Erreur API : ' . htmlspecialchars($result['error']));
+            if ($result['ok']) {
+                unset($_SESSION['accounts_cache']);
+                set_flash('success', "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée.");
+            } else {
+                set_flash('danger', 'Erreur API : ' . htmlspecialchars($result['error']));
+            }
         }
         redirect_self();
     }
@@ -260,14 +265,30 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
 $list_result = ['ok' => false, 'error' => '', 'data' => []];
 $accounts    = [];
 if ($authenticated) {
-    $n0c_id      = get_n0c_id();
-    $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
-    if ($list_result['ok']) {
-        $raw = $list_result['data'];
-        if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
-        elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
-        elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
+    $n0c_id = get_n0c_id();
+
+    // Cache session 2 minutes pour éviter de recharger 700+ emails à chaque clic
+    $cache_ok  = !empty($_SESSION['accounts_cache'])
+                 && isset($_SESSION['accounts_cache_ts'])
+                 && (time() - $_SESSION['accounts_cache_ts']) < LIST_CACHE_TTL
+                 && empty($_GET['refresh']);
+
+    if ($cache_ok) {
+        $accounts    = $_SESSION['accounts_cache'];
+        $list_result = ['ok' => true, 'error' => '', 'data' => []];
+    } else {
+        $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
+        if ($list_result['ok']) {
+            $raw = $list_result['data'];
+            if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
+            elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
+            elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
+            // Mise en cache
+            $_SESSION['accounts_cache']    = $accounts;
+            $_SESSION['accounts_cache_ts'] = time();
+        }
     }
+
     $contacts = load_contacts();
 }
 
