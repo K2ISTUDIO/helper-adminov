@@ -24,4 +24,5 @@ jobs:
           include: |
             index.php
             purge.php
-          log-level: minimal
+          log-level: verbose
+          force-upload: true

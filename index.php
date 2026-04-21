@@ -8,7 +8,7 @@ define('MAIL_DOMAIN',        'neomails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
-define('APP_VERSION',        '4.0');
+define('APP_VERSION',        '4.1');
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
