@@ -303,31 +303,31 @@ if ($authenticated) {
 }
 
 // ─── Chargement données ───────────────────────────────────
-$list_result = ['ok' => false, 'error' => '', 'data' => []];
+$list_result = ['ok' => true, 'error' => '', 'data' => []];
 $accounts    = [];
 if ($authenticated) {
-    // Sur une requête POST : toujours utiliser le cache existant (jamais d'appel API)
-    // Sur GET : recharger si cache expiré
-    $is_post  = ($_SERVER['REQUEST_METHOD'] === 'POST');
-    $cache_ok = !empty($_SESSION['accounts_cache'])
-                && ($is_post || (
-                    isset($_SESSION['accounts_cache_ts'])
-                    && (time() - $_SESSION['accounts_cache_ts']) < LIST_CACHE_TTL
-                    && empty($_GET['refresh'])
-                ));
-
-    if ($cache_ok) {
-        $accounts    = $_SESSION['accounts_cache'];
-        $list_result = ['ok' => true, 'error' => '', 'data' => []];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // POST : jamais d'appel API — utilise le cache tel quel (même vide)
+        $accounts = $_SESSION['accounts_cache'] ?? [];
     } else {
-        $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
-        if ($list_result['ok']) {
-            $raw = $list_result['data'];
-            if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
-            elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
-            elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
-            $_SESSION['accounts_cache']    = $accounts;
-            $_SESSION['accounts_cache_ts'] = time();
+        // GET : recharge si cache expiré ou absent
+        $cache_ok = !empty($_SESSION['accounts_cache'])
+                    && isset($_SESSION['accounts_cache_ts'])
+                    && (time() - $_SESSION['accounts_cache_ts']) < LIST_CACHE_TTL
+                    && empty($_GET['refresh']);
+
+        if ($cache_ok) {
+            $accounts = $_SESSION['accounts_cache'];
+        } else {
+            $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
+            if ($list_result['ok']) {
+                $raw = $list_result['data'];
+                if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
+                elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
+                elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
+                $_SESSION['accounts_cache']    = $accounts;
+                $_SESSION['accounts_cache_ts'] = time();
+            }
         }
     }
 
