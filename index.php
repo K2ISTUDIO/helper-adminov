@@ -2,16 +2,44 @@
 // ============================================================
 //  CONFIGURATION
 // ============================================================
-define('PH_API_USER',   'ca090d4c75f80521945812f3968b3df9');
-define('PH_API_KEY',    'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
-define('MAIL_DOMAIN',   'neomails.fr');
-define('APP_PASSWORD',  'S@rix93100');
-define('APP_TITLE',     'Adminov — Emails neomails.fr');
-define('APP_VERSION',   '3.2');
-define('PH_API_BASE',   'https://api.planethoster.net/v3');
-define('N0C_ACCOUNT_ID', 113185); // ID du compte N0C (mgpwvvnz)
-// DB stockée hors public_html pour sécurité
+define('PH_API_USER',        'ca090d4c75f80521945812f3968b3df9');
+define('PH_API_KEY',         'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
+define('MAIL_DOMAIN',        'neomails.fr');
+define('APP_PASSWORD',       'S@rix93100');
+define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
+define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
+define('APP_VERSION',        '4.0');
+define('PH_API_BASE',        'https://api.planethoster.net/v3');
+define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
+
+// Adresses réelles en Île-de-France (pool aléatoire)
+const IDF_ADDRESSES = [
+    '15 Rue de la Paix, 75002 Paris',
+    '42 Avenue des Champs-Élysées, 75008 Paris',
+    '8 Rue du Faubourg Saint-Antoine, 75011 Paris',
+    '23 Rue de Rivoli, 75004 Paris',
+    '37 Boulevard Voltaire, 75011 Paris',
+    '12 Rue Saint-Lazare, 75009 Paris',
+    '6 Place de la République, 75010 Paris',
+    '19 Rue de Belleville, 75019 Paris',
+    '54 Avenue d\'Italie, 75013 Paris',
+    '3 Rue de la Convention, 75015 Paris',
+    '28 Rue Legendre, 75017 Paris',
+    '11 Rue du Commerce, 75015 Paris',
+    '47 Rue d\'Alembert, 92120 Montrouge',
+    '9 Rue Victor Hugo, 92300 Levallois-Perret',
+    '22 Avenue de la République, 93100 Montreuil',
+    '5 Rue du Général Leclerc, 94000 Créteil',
+    '14 Avenue Foch, 94120 Fontenay-sous-Bois',
+    '31 Rue Carnot, 92110 Clichy',
+    '7 Boulevard Galliéni, 92130 Issy-les-Moulineaux',
+    '18 Rue des Acacias, 91300 Massy',
+    '2 Allée des Magnolias, 78000 Versailles',
+    '25 Rue Jean Jaurès, 93200 Saint-Denis',
+    '40 Rue de Paris, 93000 Bobigny',
+    '16 Avenue du Général de Gaulle, 94700 Maisons-Alfort',
+];
 // ============================================================
 
 // Vide l'OPcache pour ce fichier si disponible
@@ -35,7 +63,7 @@ if (isset($_POST['app_logout'])) {
     exit;
 }
 $authenticated = !empty($_SESSION['auth']);
-$contacts      = []; // initialisé ici pour éviter tout problème de scope
+$contacts      = [];
 
 // ─── Client API PlanetHoster ──────────────────────────────
 function ph_request(string $method, string $path, array $body = []): array
@@ -54,18 +82,13 @@ function ph_request(string $method, string $path, array $body = []): array
             'Accept: application/json',
         ],
     ]);
-    if ($body) {
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
-    }
+    if ($body) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
     $response = curl_exec($ch);
     $http     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $errno    = curl_errno($ch);
     $error    = curl_error($ch);
     curl_close($ch);
-
-    if ($errno) {
-        return ['ok' => false, 'http' => 0, 'error' => "cURL ($errno): $error", 'data' => []];
-    }
+    if ($errno) return ['ok' => false, 'http' => 0, 'error' => "cURL ($errno): $error", 'data' => []];
     $data = json_decode($response, true) ?? [];
     $ok   = $http >= 200 && $http < 300;
     $msg  = '';
@@ -76,25 +99,9 @@ function ph_request(string $method, string $path, array $body = []): array
     return ['ok' => $ok, 'http' => $http, 'error' => $msg, 'data' => $data];
 }
 
-// ─── Récupère l'ID du compte N0C ──────────────────────────
-function get_n0c_id(): int
-{
-    if (N0C_ACCOUNT_ID > 0) return N0C_ACCOUNT_ID;
-    if (!empty($_SESSION['n0c_id'])) return (int)$_SESSION['n0c_id'];
-    // Cherche dans world_accounts
-    $r = ph_request('GET', '/the-world/info');
-    if ($r['ok'] && !empty($r['data']['world_accounts'])) {
-        foreach ($r['data']['world_accounts'] as $acc) {
-            if (!empty($acc['id'])) {
-                $_SESSION['n0c_id'] = (int)$acc['id'];
-                return $_SESSION['n0c_id'];
-            }
-        }
-    }
-    return 0;
-}
+function get_n0c_id(): int { return N0C_ACCOUNT_ID; }
 
-// ─── Base de données SQLite (fiches contacts) ─────────────
+// ─── Base de données SQLite ───────────────────────────────
 function get_db(): PDO
 {
     static $db = null;
@@ -142,33 +149,49 @@ if ($authenticated) {
 
     $n0c_id = get_n0c_id();
 
-    // Créer un email
-    if (($_POST['action'] ?? '') === 'create') {
-        $prefix   = trim($_POST['prefix']   ?? '');
-        $password = trim($_POST['password'] ?? '');
-        $quota    = max(0, (int)($_POST['quota'] ?? 250));
+    // ── Intégrer un nouveau bénéficiaire (email + fiche) ──
+    if (($_POST['action'] ?? '') === 'onboard') {
+        $nom       = trim($_POST['nom']       ?? '');
+        $prenom    = trim($_POST['prenom']    ?? '');
+        $prefix    = trim($_POST['prefix']    ?? '');
+        $telephone = trim($_POST['telephone'] ?? '');
+        $naissance = trim($_POST['naissance'] ?? '');
+        $pays      = trim($_POST['pays']      ?? '');
+        $adresse   = trim($_POST['adresse']   ?? '');
+        $rib       = trim($_POST['rib']       ?? '');
 
-        if (!$prefix || !$password) {
-            $flash = ['type' => 'danger', 'msg' => 'Le préfixe et le mot de passe sont obligatoires.'];
+        if (!$nom || !$prenom || !$prefix) {
+            $flash = ['type' => 'danger', 'msg' => 'Nom, prénom et identifiant email sont obligatoires.'];
         } elseif (!preg_match('/^[a-zA-Z0-9._+\-]+$/', $prefix)) {
-            $flash = ['type' => 'danger', 'msg' => 'Préfixe invalide (lettres, chiffres, . _ + - autorisés).'];
-        } elseif (strlen($password) < 8) {
-            $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
+            $flash = ['type' => 'danger', 'msg' => 'Identifiant email invalide (lettres, chiffres, . _ + - autorisés).'];
         } else {
+            $full_email = $prefix . '@' . MAIL_DOMAIN;
             $result = ph_request('POST', '/hosting/email', [
                 'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
                 'mailUser' => $prefix,
-                'password' => $password,
-                'quota'    => $quota,
+                'password' => DEFAULT_EMAIL_PWD,
+                'quota'    => 250,
             ]);
-            $flash = $result['ok']
-                ? ['type' => 'success', 'msg' => "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> créée avec succès."]
-                : ['type' => 'danger',  'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
+            if ($result['ok'] || str_contains(strtolower($result['error'] ?? ''), 'exist')) {
+                save_contact($full_email, [
+                    'nom'       => $nom,
+                    'prenom'    => $prenom,
+                    'naissance' => $naissance,
+                    'adresse'   => $adresse,
+                    'pays'      => $pays,
+                    'telephone' => $telephone,
+                    'rib'       => $rib,
+                ]);
+                $flash = ['type' => 'success', 'msg' =>
+                    "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé avec le mot de passe par défaut."];
+            } else {
+                $flash = ['type' => 'danger', 'msg' => 'Erreur création email : ' . htmlspecialchars($result['error'])];
+            }
         }
     }
 
-    // Supprimer un email
+    // ── Supprimer un email ────────────────────────────────
     if (($_POST['action'] ?? '') === 'delete') {
         $prefix = trim($_POST['prefix'] ?? '');
         if (!$prefix) {
@@ -185,7 +208,7 @@ if ($authenticated) {
         }
     }
 
-    // Changer le mot de passe
+    // ── Changer le mot de passe ───────────────────────────
     if (($_POST['action'] ?? '') === 'passwd') {
         $prefix   = trim($_POST['prefix']   ?? '');
         $password = trim($_POST['password'] ?? '');
@@ -206,7 +229,7 @@ if ($authenticated) {
         }
     }
 
-    // Sauvegarder une fiche contact
+    // ── Sauvegarder une fiche contact ─────────────────────
     if (($_POST['action'] ?? '') === 'save_contact') {
         $cemail = trim($_POST['c_email'] ?? '');
         if ($cemail) {
@@ -223,7 +246,7 @@ if ($authenticated) {
         }
     }
 
-    // Charger la liste des emails
+    // ── Charger la liste des emails ───────────────────────
     $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
     $accounts    = [];
     if ($list_result['ok']) {
@@ -233,7 +256,6 @@ if ($authenticated) {
         elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
     }
 
-    // Charger les fiches contacts
     $contacts = load_contacts();
 }
 
@@ -245,7 +267,9 @@ function strong_password(int $len = 16): string
     for ($i = 0; $i < $len; $i++) $out .= $chars[random_int(0, strlen($chars) - 1)];
     return $out;
 }
-$suggested = strong_password();
+
+// Adresse IDF aléatoire pour pré-remplissage
+$random_address = IDF_ADDRESSES[array_rand(IDF_ADDRESSES)];
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -256,7 +280,7 @@ $suggested = strong_password();
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
-:root { --brand:#0e6adb; --brand-dark:#0a55b3; --surface:#f4f7ff; }
+:root { --brand:#0e6adb; --brand-dark:#0a55b3; --surface:#f0f4ff; }
 *, ::before, ::after { box-sizing: border-box; }
 body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
 
@@ -285,6 +309,11 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 .empty-state i { font-size:2.5rem; display:block; margin-bottom:.75rem; }
 .section-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;
                  color:#9ca3af; font-weight:600; margin-bottom:.4rem; }
+.email-preview { font-family:monospace; font-size:.85rem; color:var(--brand);
+                 background:rgba(14,106,219,.07); padding:.25rem .6rem; border-radius:6px;
+                 display:inline-block; transition:all .2s; }
+.tools-toggle { font-size:.8rem; cursor:pointer; color:#6b7280; text-decoration:none; }
+.tools-toggle:hover { color:var(--brand); }
 </style>
 </head>
 <body>
@@ -294,8 +323,8 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 <div class="login-wrap">
   <div class="login-card">
     <div class="text-center mb-4">
-      <div class="login-logo"><i class="bi bi-envelope-at-fill"></i> Adminov</div>
-      <div class="login-sub mt-1">Gestion des emails <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong></div>
+      <div class="login-logo"><i class="bi bi-person-vcard-fill"></i> Adminov</div>
+      <div class="login-sub mt-1">Avance Immédiate URSSAF — <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong></div>
     </div>
     <?php if ($auth_error): ?>
     <div class="alert alert-danger py-2 mb-3">
@@ -321,7 +350,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 <nav class="navbar navbar-dark" style="background:var(--brand); box-shadow:0 2px 8px rgba(14,106,219,.3);">
   <div class="container-xl">
     <span class="navbar-brand">
-      <i class="bi bi-envelope-at-fill me-2 opacity-75"></i><?= htmlspecialchars(APP_TITLE) ?>
+      <i class="bi bi-person-vcard-fill me-2 opacity-75"></i><?= htmlspecialchars(APP_TITLE) ?>
       <span class="domain-badge ms-2"><?= htmlspecialchars(MAIL_DOMAIN) ?></span>
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;">v<?= APP_VERSION ?></span>
     </span>
@@ -346,98 +375,148 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
   <div class="row g-4">
 
-    <!-- ──────── Colonne gauche : formulaires ──────── -->
-    <div class="col-xl-4 col-lg-5">
+    <!-- ──────── Colonne gauche ──────── -->
+    <div class="col-xl-5 col-lg-5">
 
-      <!-- Créer -->
-      <div class="card">
-        <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
-          <i class="bi bi-plus-circle-fill"></i> Créer une adresse email
+      <!-- ★ FORMULAIRE NOUVEAU BÉNÉFICIAIRE ★ -->
+      <div class="card border-0" style="box-shadow:0 4px 24px rgba(14,106,219,.18);">
+        <div class="card-header text-white d-flex align-items-center gap-2" style="background:var(--brand);">
+          <i class="bi bi-person-plus-fill fs-5"></i>
+          <span>Nouveau bénéficiaire</span>
+          <span class="badge bg-white text-primary ms-auto" style="font-size:.7rem;">Avance Immédiate URSSAF</span>
         </div>
-        <div class="card-body">
-          <form method="post" autocomplete="off">
-            <input type="hidden" name="action" value="create">
+        <div class="card-body pt-3 pb-4">
+          <form method="post" autocomplete="off" id="onboard-form">
+            <input type="hidden" name="action" value="onboard">
 
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Préfixe <span class="text-danger">*</span></label>
-              <div class="input-group">
-                <input type="text" name="prefix" class="form-control" placeholder="contact"
-                       pattern="[a-zA-Z0-9._+\-]+" required autofocus>
-                <span class="input-group-text text-muted">@<?= htmlspecialchars(MAIL_DOMAIN) ?></span>
+            <!-- Identité -->
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Nom <span class="text-danger">*</span></label>
+                <input type="text" name="nom" id="f-nom" class="form-control" placeholder="DUPONT"
+                       style="text-transform:uppercase" required autofocus>
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Prénom <span class="text-danger">*</span></label>
+                <input type="text" name="prenom" id="f-prenom" class="form-control" placeholder="Jean" required>
               </div>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Mot de passe <span class="text-danger">*</span></label>
+            <!-- Email généré -->
+            <div class="mb-2">
+              <label class="form-label fw-semibold mb-1">Adresse email <span class="text-danger">*</span></label>
               <div class="input-group">
-                <input type="text" id="pwd-create" name="password" class="form-control font-monospace"
-                       value="<?= htmlspecialchars($suggested) ?>" required minlength="8">
-                <button type="button" class="btn btn-outline-secondary" id="regenBtn" title="Régénérer">
+                <input type="text" name="prefix" id="f-prefix" class="form-control font-monospace"
+                       placeholder="jean.dupont" pattern="[a-zA-Z0-9._+\-]+" required>
+                <span class="input-group-text text-muted small">@<?= htmlspecialchars(MAIL_DOMAIN) ?></span>
+                <button type="button" class="btn btn-outline-secondary" id="regen-prefix-btn" title="Regénérer depuis nom/prénom">
                   <i class="bi bi-arrow-clockwise"></i>
                 </button>
-                <button type="button" class="btn btn-outline-secondary" data-copy="pwd-create" title="Copier">
-                  <i class="bi bi-clipboard"></i>
+              </div>
+              <div class="form-text">
+                Mot de passe par défaut : <code class="text-danger fw-bold"><?= htmlspecialchars(DEFAULT_EMAIL_PWD) ?></code>
+              </div>
+            </div>
+
+            <!-- Téléphone -->
+            <div class="mb-2">
+              <label class="form-label fw-semibold mb-1">Téléphone</label>
+              <input type="tel" name="telephone" id="f-telephone" class="form-control"
+                     placeholder="+33 6 00 00 00 00">
+            </div>
+
+            <!-- Date et pays de naissance -->
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Date de naissance</label>
+                <input type="date" name="naissance" id="f-naissance" class="form-control">
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-semibold mb-1">Pays de naissance</label>
+                <input type="text" name="pays" id="f-pays" class="form-control" placeholder="France">
+              </div>
+            </div>
+
+            <!-- Adresse -->
+            <div class="mb-2">
+              <label class="form-label fw-semibold mb-1">Adresse de résidence</label>
+              <div class="input-group">
+                <input type="text" name="adresse" id="f-adresse" class="form-control"
+                       placeholder="Adresse complète"
+                       value="<?= htmlspecialchars($random_address) ?>">
+                <button type="button" class="btn btn-outline-secondary" id="rand-addr-btn" title="Adresse aléatoire IDF">
+                  <i class="bi bi-shuffle"></i>
                 </button>
               </div>
-              <div class="form-text">Minimum 8 caractères</div>
+              <div class="form-text">Cliquez <i class="bi bi-shuffle"></i> pour une adresse IDF aléatoire</div>
             </div>
 
-            <div class="mb-4">
-              <label class="form-label fw-semibold">Quota (Mo)</label>
-              <input type="number" name="quota" class="form-control" value="250" min="0" max="51200">
-              <div class="form-text">0 = illimité</div>
+            <!-- RIB -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold mb-1">RIB</label>
+              <input type="text" name="rib" id="f-rib" class="form-control font-monospace"
+                     placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
             </div>
 
-            <button type="submit" class="btn btn-brand w-100 fw-semibold">
-              <i class="bi bi-envelope-plus me-1"></i>Créer l'adresse
+            <button type="submit" class="btn btn-brand w-100 fw-semibold py-2">
+              <i class="bi bi-person-check-fill me-2"></i>Créer l'email &amp; enregistrer la fiche
             </button>
           </form>
         </div>
       </div>
 
-      <!-- Changer mot de passe -->
-      <div class="card mt-4">
-        <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
-          <i class="bi bi-key-fill"></i> Changer un mot de passe
-        </div>
-        <div class="card-body">
-          <form method="post" autocomplete="off">
-            <input type="hidden" name="action" value="passwd">
-            <div class="mb-2">
-              <div class="input-group">
-                <input type="text" name="prefix" class="form-control" placeholder="utilisateur" required>
-                <span class="input-group-text text-muted">@<?= htmlspecialchars(MAIL_DOMAIN) ?></span>
-              </div>
+      <!-- Outils (accordéon) -->
+      <div class="mt-3">
+        <a class="tools-toggle d-flex align-items-center gap-1 mb-2" data-bs-toggle="collapse" href="#tools-section">
+          <i class="bi bi-tools"></i> Outils avancés
+          <i class="bi bi-chevron-down ms-1" style="font-size:.75rem;"></i>
+        </a>
+        <div class="collapse" id="tools-section">
+          <!-- Changer mot de passe -->
+          <div class="card mb-3">
+            <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
+              <i class="bi bi-key-fill"></i> Changer un mot de passe
             </div>
-            <div class="mb-3">
-              <div class="input-group">
-                <input type="text" id="pwd-change" name="password" class="form-control font-monospace"
-                       placeholder="Nouveau mot de passe" required minlength="8">
-                <button type="button" class="btn btn-outline-secondary" data-copy="pwd-change" title="Copier">
-                  <i class="bi bi-clipboard"></i>
+            <div class="card-body">
+              <form method="post" autocomplete="off">
+                <input type="hidden" name="action" value="passwd">
+                <div class="mb-2">
+                  <div class="input-group">
+                    <input type="text" name="prefix" class="form-control" placeholder="utilisateur" required>
+                    <span class="input-group-text text-muted">@<?= htmlspecialchars(MAIL_DOMAIN) ?></span>
+                  </div>
+                </div>
+                <div class="mb-2">
+                  <div class="input-group">
+                    <input type="text" id="pwd-change" name="password" class="form-control font-monospace"
+                           placeholder="Nouveau mot de passe" required minlength="8">
+                    <button type="button" class="btn btn-outline-secondary" data-copy="pwd-change" title="Copier">
+                      <i class="bi bi-clipboard"></i>
+                    </button>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-warning w-100 fw-semibold">
+                  <i class="bi bi-key me-1"></i>Modifier le mot de passe
                 </button>
-              </div>
+              </form>
             </div>
-            <button type="submit" class="btn btn-warning w-100 fw-semibold">
-              <i class="bi bi-key me-1"></i>Modifier le mot de passe
-            </button>
-          </form>
+          </div>
         </div>
       </div>
 
     </div><!-- /col gauche -->
 
     <!-- ──────── Colonne droite : liste ──────── -->
-    <div class="col-xl-8 col-lg-7">
+    <div class="col-xl-7 col-lg-7">
       <div class="card">
         <div class="card-header bg-dark text-white d-flex align-items-center flex-wrap gap-2">
-          <i class="bi bi-list-ul"></i>
-          <span>Adresses existantes</span>
+          <i class="bi bi-people-fill"></i>
+          <span>Bénéficiaires</span>
           <span class="badge bg-secondary" id="count-badge"><?= count($accounts) ?></span>
           <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
             <input type="search" id="email-search" class="form-control form-control-sm"
-                   placeholder="Rechercher…" style="width:200px;">
-            <select id="per-page" class="form-select form-select-sm" style="width:80px;">
+                   placeholder="Rechercher…" style="width:180px;">
+            <select id="per-page" class="form-select form-select-sm" style="width:75px;">
               <option value="20">20</option>
               <option value="50">50</option>
               <option value="100">100</option>
@@ -464,7 +543,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                   <th>Adresse</th>
                   <th>Quota</th>
                   <th>Utilisé</th>
-                  <th class="text-center" style="width:100px;">Actions</th>
+                  <th class="text-center" style="width:90px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -483,7 +562,12 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                 ?>
                 <tr class="email-row" data-email="<?= htmlspecialchars(strtolower($full_email)) ?>">
                   <td class="email-col">
-                    <?= htmlspecialchars($full_email) ?>
+                    <?php if ($has_contact): ?>
+                    <div class="fw-semibold" style="font-size:.82rem;color:#374151;">
+                      <?= htmlspecialchars($contact['prenom'] . ' ' . strtoupper($contact['nom'])) ?>
+                    </div>
+                    <?php endif; ?>
+                    <span class="text-muted" style="font-size:.85rem;"><?= htmlspecialchars($full_email) ?></span>
                     <i class="bi bi-clipboard copy-icon ms-1"
                        data-copy-val="<?= htmlspecialchars($full_email) ?>"
                        title="Copier"></i>
@@ -517,30 +601,6 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
           <?php endif; ?>
         </div>
       </div>
-
-      <!-- Infos API -->
-      <div class="card mt-4">
-        <div class="card-header bg-secondary text-white d-flex align-items-center gap-2">
-          <i class="bi bi-plug-fill"></i> Informations API
-        </div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-sm-6">
-              <div class="section-label">Endpoint</div>
-              <code class="text-break"><?= htmlspecialchars(PH_API_BASE) ?>/emails</code>
-            </div>
-            <div class="col-sm-6">
-              <div class="section-label">Domaine géré</div>
-              <code><?= htmlspecialchars(MAIL_DOMAIN) ?></code>
-            </div>
-            <div class="col-sm-12">
-              <div class="section-label">API User</div>
-              <code><?= htmlspecialchars(substr(PH_API_USER, 0, 8)) ?>••••••••••••••••••••••••</code>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div><!-- /col droite -->
   </div>
 </div>
@@ -562,7 +622,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
           <div class="row g-3">
             <div class="col-sm-6">
               <label class="form-label fw-semibold">Nom</label>
-              <input type="text" name="c_nom" id="c_nom" class="form-control" placeholder="Dupont">
+              <input type="text" name="c_nom" id="c_nom" class="form-control" placeholder="DUPONT">
             </div>
             <div class="col-sm-6">
               <label class="form-label fw-semibold">Prénom</label>
@@ -578,22 +638,23 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">Adresse de résidence</label>
-              <input type="text" name="c_adresse" id="c_adresse" class="form-control" placeholder="12 rue de la Paix, 75001 Paris">
+              <input type="text" name="c_adresse" id="c_adresse" class="form-control">
             </div>
             <div class="col-sm-6">
-              <label class="form-label fw-semibold">Numéro de téléphone</label>
+              <label class="form-label fw-semibold">Téléphone</label>
               <input type="tel" name="c_telephone" id="c_telephone" class="form-control" placeholder="+33 6 00 00 00 00">
             </div>
             <div class="col-sm-6">
               <label class="form-label fw-semibold">RIB</label>
-              <input type="text" name="c_rib" id="c_rib" class="form-control font-monospace" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+              <input type="text" name="c_rib" id="c_rib" class="form-control font-monospace"
+                     placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
             </div>
           </div>
         </div>
         <div class="modal-footer border-0 bg-light">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
           <button type="submit" class="btn btn-brand fw-semibold">
-            <i class="bi bi-floppy-fill me-1"></i>Enregistrer la fiche
+            <i class="bi bi-floppy-fill me-1"></i>Enregistrer
           </button>
         </div>
       </form>
@@ -634,14 +695,42 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Copie presse-papier — boutons data-copy (id de champ)
+// ── Adresses IDF côté client (même liste que PHP) ──────────
+const IDF_ADDRESSES = <?= json_encode(IDF_ADDRESSES) ?>;
+
+// ── Utilitaire slugify (retire accents, met en minuscules) ─
+function slugify(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '.');
+}
+
+// ── Génération auto du préfixe email depuis nom/prénom ─────
+function updatePrefix() {
+  const nom    = document.getElementById('f-nom')?.value.trim()    || '';
+  const prenom = document.getElementById('f-prenom')?.value.trim() || '';
+  if (prenom || nom) {
+    document.getElementById('f-prefix').value =
+      slugify(prenom) + (prenom && nom ? '.' : '') + slugify(nom);
+  }
+}
+document.getElementById('f-prenom')?.addEventListener('blur',  updatePrefix);
+document.getElementById('f-nom')?.addEventListener('blur',    updatePrefix);
+document.getElementById('regen-prefix-btn')?.addEventListener('click', updatePrefix);
+
+// ── Adresse aléatoire IDF ──────────────────────────────────
+document.getElementById('rand-addr-btn')?.addEventListener('click', () => {
+  const a = IDF_ADDRESSES[Math.floor(Math.random() * IDF_ADDRESSES.length)];
+  document.getElementById('f-adresse').value = a;
+});
+
+// ── Copie presse-papier ────────────────────────────────────
 document.querySelectorAll('[data-copy]').forEach(btn => {
   btn.addEventListener('click', () => {
     const el = document.getElementById(btn.dataset.copy);
     if (el) copyText(el.value, btn);
   });
 });
-// Copie presse-papier — icônes data-copy-val (valeur directe)
 document.querySelectorAll('[data-copy-val]').forEach(el => {
   el.style.cursor = 'pointer';
   el.addEventListener('click', () => copyText(el.dataset.copyVal, el));
@@ -654,18 +743,7 @@ function copyText(text, el) {
   });
 }
 
-// Regénérer mot de passe fort
-const CHARS = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
-function genPwd(n = 16) {
-  const arr = new Uint32Array(n);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, v => CHARS[v % CHARS.length]).join('');
-}
-document.getElementById('regenBtn')?.addEventListener('click', () => {
-  document.getElementById('pwd-create').value = genPwd();
-});
-
-// Modal fiche contact
+// ── Modal fiche contact ────────────────────────────────────
 function openContact(data) {
   document.getElementById('c_email').value      = data.email     || '';
   document.getElementById('c_nom').value        = data.nom       || '';
@@ -675,11 +753,11 @@ function openContact(data) {
   document.getElementById('c_adresse').value    = data.adresse   || '';
   document.getElementById('c_telephone').value  = data.telephone || '';
   document.getElementById('c_rib').value        = data.rib       || '';
-  document.getElementById('c-title').textContent = data.email    || '';
+  document.getElementById('c-title').textContent = data.email   || '';
   new bootstrap.Modal(document.getElementById('contactModal')).show();
 }
 
-// Modal suppression
+// ── Modal suppression ──────────────────────────────────────
 function confirmDelete(prefix, fullEmail) {
   document.getElementById('del-prefix').value       = prefix;
   document.getElementById('del-display').textContent = fullEmail;
@@ -688,19 +766,16 @@ function confirmDelete(prefix, fullEmail) {
 
 // ── Pagination + Recherche ─────────────────────────────────
 (function () {
-  const table    = document.getElementById('email-table');
+  const table   = document.getElementById('email-table');
   if (!table) return;
-  const search   = document.getElementById('email-search');
-  const perPage  = document.getElementById('per-page');
-  const nav      = document.getElementById('pagination-nav');
-  const info     = document.getElementById('pagination-info');
-  const badge    = document.getElementById('count-badge');
+  const search  = document.getElementById('email-search');
+  const perPage = document.getElementById('per-page');
+  const nav     = document.getElementById('pagination-nav');
+  const info    = document.getElementById('pagination-info');
+  const badge   = document.getElementById('count-badge');
   let currentPage = 1;
 
-  function allRows() {
-    return Array.from(table.querySelectorAll('tbody .email-row'));
-  }
-
+  function allRows()  { return Array.from(table.querySelectorAll('tbody .email-row')); }
   function filtered() {
     const q = (search?.value || '').toLowerCase().trim();
     return allRows().filter(r => !q || r.dataset.email.includes(q));
@@ -713,19 +788,16 @@ function confirmDelete(prefix, fullEmail) {
     const pages = pp === 0 ? 1 : Math.ceil(total / pp);
     if (currentPage > pages) currentPage = 1;
 
-    // Masque tout, affiche la page courante
     allRows().forEach(r => r.style.display = 'none');
     const start = pp === 0 ? 0 : (currentPage - 1) * pp;
     const end   = pp === 0 ? total : start + pp;
     rows.slice(start, end).forEach(r => r.style.display = '');
 
-    // Info
     const from = total === 0 ? 0 : start + 1;
     const to   = Math.min(end, total);
-    if (info) info.textContent = `${from}–${to} sur ${total} adresse${total > 1 ? 's' : ''}`;
+    if (info)  info.textContent  = `${from}–${to} sur ${total}`;
     if (badge) badge.textContent = total;
 
-    // Nav
     if (!nav) return;
     nav.innerHTML = '';
     if (pages <= 1 && pp !== 0) return;
@@ -739,20 +811,16 @@ function confirmDelete(prefix, fullEmail) {
     };
 
     nav.appendChild(mkLi('‹', currentPage - 1, currentPage === 1));
-
-    // Fenêtre glissante de 5 pages
     let pStart = Math.max(1, currentPage - 2);
     let pEnd   = Math.min(pages, pStart + 4);
     if (pEnd - pStart < 4) pStart = Math.max(1, pEnd - 4);
-
     if (pStart > 1) { nav.appendChild(mkLi(1, 1)); if (pStart > 2) nav.appendChild(mkLi('…', null, true)); }
     for (let p = pStart; p <= pEnd; p++) nav.appendChild(mkLi(p, p, false, p === currentPage));
     if (pEnd < pages) { if (pEnd < pages - 1) nav.appendChild(mkLi('…', null, true)); nav.appendChild(mkLi(pages, pages)); }
-
     nav.appendChild(mkLi('›', currentPage + 1, currentPage === pages));
   }
 
-  search?.addEventListener('input',  () => { currentPage = 1; render(); });
+  search?.addEventListener('input',   () => { currentPage = 1; render(); });
   perPage?.addEventListener('change', () => { currentPage = 1; render(); });
   render();
 })();
