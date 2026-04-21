@@ -86,7 +86,7 @@ if ($authenticated) {
         } elseif (strlen($password) < 8) {
             $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
         } else {
-            $result = ph_request('POST', '/emails', [
+            $result = ph_request('POST', '/hosting/email', [
                 'domain'   => MAIL_DOMAIN,
                 'email'    => $prefix,
                 'password' => $password,
@@ -104,7 +104,7 @@ if ($authenticated) {
         if (!$prefix) {
             $flash = ['type' => 'danger', 'msg' => 'Paramètre manquant.'];
         } else {
-            $result = ph_request('DELETE', '/emails', [
+            $result = ph_request('DELETE', '/hosting/email', [
                 'domain' => MAIL_DOMAIN,
                 'email'  => $prefix,
             ]);
@@ -123,7 +123,7 @@ if ($authenticated) {
         } elseif (strlen($password) < 8) {
             $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
         } else {
-            $result = ph_request('PUT', '/emails', [
+            $result = ph_request('PATCH', '/hosting/email', [
                 'domain'   => MAIL_DOMAIN,
                 'email'    => $prefix,
                 'password' => $password,
@@ -135,7 +135,7 @@ if ($authenticated) {
     }
 
     // Charger la liste des emails
-    $list_result = ph_request('GET', '/emails?domain=' . urlencode(MAIL_DOMAIN));
+    $list_result = ph_request('GET', '/hosting/emails?domain=' . urlencode(MAIL_DOMAIN));
     $accounts    = [];
     if ($list_result['ok']) {
         $raw = $list_result['data'];
