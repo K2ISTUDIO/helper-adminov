@@ -1,4 +1,6 @@
 <?php
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
 // ============================================================
 //  CONFIGURATION
 // ============================================================
@@ -168,7 +170,7 @@ $flash = $_SESSION['flash'] ?? ['type' => '', 'msg' => ''];
 unset($_SESSION['flash']);
 
 if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
-
+try {
     $n0c_id = get_n0c_id();
     $action = $_POST['action'] ?? '';
 
@@ -271,6 +273,10 @@ if ($authenticated && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect_self();
     }
+} catch (Throwable $e) {
+    set_flash('danger', 'Erreur PHP : ' . htmlspecialchars($e->getMessage()) . ' — ' . htmlspecialchars(basename($e->getFile())) . ':' . $e->getLine());
+    redirect_self();
+}
 }
 
 // ─── Chargement données (GET uniquement) ──────────────────
