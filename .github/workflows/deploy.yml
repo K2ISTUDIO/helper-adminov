@@ -16,7 +16,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server:   node242-eu.n0c.com
-          username: mgpwvvnz
+          username: deploy@neomails.fr
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir:  ./
           server-dir: public_html/adminov/
