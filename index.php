@@ -2,12 +2,15 @@
 // ============================================================
 //  CONFIGURATION
 // ============================================================
-define('PH_API_USER',  'ca090d4c75f80521945812f3968b3df9');
-define('PH_API_KEY',   'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
-define('MAIL_DOMAIN',  'neomails.fr');
-define('APP_PASSWORD', 'S@rix93100');
-define('APP_TITLE',    'Adminov — Emails neomails.fr');
-define('PH_API_BASE',  'https://api.planethoster.net/v3');
+define('PH_API_USER',   'ca090d4c75f80521945812f3968b3df9');
+define('PH_API_KEY',    'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
+define('MAIL_DOMAIN',   'neomails.fr');
+define('APP_PASSWORD',  'S@rix93100');
+define('APP_TITLE',     'Adminov — Emails neomails.fr');
+define('PH_API_BASE',   'https://api.planethoster.net/v3');
+define('N0C_ACCOUNT_ID', 113185); // ID du compte N0C (mgpwvvnz)
+// DB stockée hors public_html pour sécurité
+define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
 // ============================================================
 
 session_start();
@@ -68,10 +71,71 @@ function ph_request(string $method, string $path, array $body = []): array
     return ['ok' => $ok, 'http' => $http, 'error' => $msg, 'data' => $data];
 }
 
+// ─── Récupère l'ID du compte N0C ──────────────────────────
+function get_n0c_id(): int
+{
+    if (N0C_ACCOUNT_ID > 0) return N0C_ACCOUNT_ID;
+    if (!empty($_SESSION['n0c_id'])) return (int)$_SESSION['n0c_id'];
+    // Cherche dans world_accounts
+    $r = ph_request('GET', '/the-world/info');
+    if ($r['ok'] && !empty($r['data']['world_accounts'])) {
+        foreach ($r['data']['world_accounts'] as $acc) {
+            if (!empty($acc['id'])) {
+                $_SESSION['n0c_id'] = (int)$acc['id'];
+                return $_SESSION['n0c_id'];
+            }
+        }
+    }
+    return 0;
+}
+
+// ─── Base de données SQLite (fiches contacts) ─────────────
+function get_db(): PDO
+{
+    static $db = null;
+    if ($db) return $db;
+    $db = new PDO('sqlite:' . DB_PATH);
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $db->exec("CREATE TABLE IF NOT EXISTS contacts (
+        email        TEXT PRIMARY KEY,
+        nom          TEXT DEFAULT '',
+        prenom       TEXT DEFAULT '',
+        naissance    TEXT DEFAULT '',
+        adresse      TEXT DEFAULT '',
+        pays         TEXT DEFAULT '',
+        telephone    TEXT DEFAULT '',
+        rib          TEXT DEFAULT '',
+        updated_at   TEXT DEFAULT ''
+    )");
+    return $db;
+}
+
+function load_contacts(): array
+{
+    try {
+        $rows = get_db()->query("SELECT * FROM contacts")->fetchAll(PDO::FETCH_ASSOC);
+        $map  = [];
+        foreach ($rows as $r) $map[$r['email']] = $r;
+        return $map;
+    } catch (Exception $e) { return []; }
+}
+
+function save_contact(string $email, array $d): void
+{
+    get_db()->prepare("INSERT OR REPLACE INTO contacts
+        (email,nom,prenom,naissance,adresse,pays,telephone,rib,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?)")
+    ->execute([$email, $d['nom'], $d['prenom'], $d['naissance'],
+               $d['adresse'], $d['pays'], $d['telephone'], $d['rib'],
+               date('Y-m-d H:i:s')]);
+}
+
 // ─── Actions POST ─────────────────────────────────────────
 $flash = ['type' => '', 'msg' => ''];
 
 if ($authenticated) {
+
+    $n0c_id = get_n0c_id();
 
     // Créer un email
     if (($_POST['action'] ?? '') === 'create') {
@@ -87,8 +151,9 @@ if ($authenticated) {
             $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
         } else {
             $result = ph_request('POST', '/hosting/email', [
+                'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
-                'email'    => $prefix,
+                'mailUser' => $prefix,
                 'password' => $password,
                 'quota'    => $quota,
             ]);
@@ -105,8 +170,9 @@ if ($authenticated) {
             $flash = ['type' => 'danger', 'msg' => 'Paramètre manquant.'];
         } else {
             $result = ph_request('DELETE', '/hosting/email', [
-                'domain' => MAIL_DOMAIN,
-                'email'  => $prefix,
+                'id'       => $n0c_id,
+                'domain'   => MAIL_DOMAIN,
+                'mailUser' => $prefix,
             ]);
             $flash = $result['ok']
                 ? ['type' => 'success', 'msg' => "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée."]
@@ -124,8 +190,9 @@ if ($authenticated) {
             $flash = ['type' => 'danger', 'msg' => 'Mot de passe trop court (8 caractères minimum).'];
         } else {
             $result = ph_request('PATCH', '/hosting/email', [
+                'id'       => $n0c_id,
                 'domain'   => MAIL_DOMAIN,
-                'email'    => $prefix,
+                'mailUser' => $prefix,
                 'password' => $password,
             ]);
             $flash = $result['ok']
@@ -134,16 +201,35 @@ if ($authenticated) {
         }
     }
 
+    // Sauvegarder une fiche contact
+    if (($_POST['action'] ?? '') === 'save_contact') {
+        $cemail = trim($_POST['c_email'] ?? '');
+        if ($cemail) {
+            save_contact($cemail, [
+                'nom'       => trim($_POST['c_nom']       ?? ''),
+                'prenom'    => trim($_POST['c_prenom']    ?? ''),
+                'naissance' => trim($_POST['c_naissance'] ?? ''),
+                'adresse'   => trim($_POST['c_adresse']   ?? ''),
+                'pays'      => trim($_POST['c_pays']      ?? ''),
+                'telephone' => trim($_POST['c_telephone'] ?? ''),
+                'rib'       => trim($_POST['c_rib']       ?? ''),
+            ]);
+            $flash = ['type' => 'success', 'msg' => "Fiche de <strong>{$cemail}</strong> enregistrée."];
+        }
+    }
+
     // Charger la liste des emails
-    $list_result = ph_request('GET', '/hosting/emails?domain=' . urlencode(MAIL_DOMAIN));
+    $list_result = ph_request('GET', '/hosting/emails?id=' . $n0c_id . '&domain=' . urlencode(MAIL_DOMAIN));
     $accounts    = [];
     if ($list_result['ok']) {
         $raw = $list_result['data'];
-        // Normalise selon la structure retournée par l'API
-        if (isset($raw['data']) && is_array($raw['data']))        $accounts = $raw['data'];
+        if (isset($raw['data']) && is_array($raw['data']))         $accounts = $raw['data'];
         elseif (isset($raw['emails']) && is_array($raw['emails'])) $accounts = $raw['emails'];
         elseif (is_array($raw) && isset($raw[0]))                  $accounts = $raw;
     }
+
+    // Charger les fiches contacts
+    $contacts = load_contacts();
 }
 
 // ─── Génération mot de passe fort ─────────────────────────
@@ -338,10 +424,20 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
     <!-- ──────── Colonne droite : liste ──────── -->
     <div class="col-xl-8 col-lg-7">
       <div class="card">
-        <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+        <div class="card-header bg-dark text-white d-flex align-items-center flex-wrap gap-2">
           <i class="bi bi-list-ul"></i>
           <span>Adresses existantes</span>
-          <span class="badge bg-secondary ms-auto"><?= count($accounts) ?></span>
+          <span class="badge bg-secondary" id="count-badge"><?= count($accounts) ?></span>
+          <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+            <input type="search" id="email-search" class="form-control form-control-sm"
+                   placeholder="Rechercher…" style="width:200px;">
+            <select id="per-page" class="form-select form-select-sm" style="width:80px;">
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="0">Tout</option>
+            </select>
+          </div>
         </div>
         <div class="card-body p-0">
           <?php if (empty($accounts)): ?>
@@ -356,30 +452,30 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
           </div>
           <?php else: ?>
           <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover mb-0" id="email-table">
               <thead class="table-light">
                 <tr>
                   <th>Adresse</th>
                   <th>Quota</th>
                   <th>Utilisé</th>
-                  <th class="text-center" style="width:60px;">Action</th>
+                  <th class="text-center" style="width:100px;">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <?php foreach ($accounts as $acc):
-                    // Normalise les champs selon la structure API
-                    $prefix_val = $acc['email']    ?? $acc['login']    ?? $acc['username'] ?? $acc['prefix'] ?? '—';
-                    $quota_val  = $acc['quota']     ?? $acc['quota_mb'] ?? $acc['diskquota'] ?? '?';
-                    $used_val   = $acc['disk_used'] ?? $acc['diskused'] ?? $acc['used']      ?? null;
-                    $full_email = (strpos($prefix_val, '@') !== false)
-                        ? $prefix_val
-                        : $prefix_val . '@' . MAIL_DOMAIN;
+                    $prefix_val  = $acc['mailUser'] ?? $acc['email'] ?? $acc['login'] ?? $acc['username'] ?? '—';
+                    $quota_val   = $acc['quota']     ?? $acc['quota_mb'] ?? $acc['diskquota'] ?? '?';
+                    $used_val    = $acc['disk_used'] ?? $acc['diskused'] ?? $acc['used']      ?? null;
+                    $full_email  = (strpos($prefix_val, '@') !== false) ? $prefix_val : $prefix_val . '@' . MAIL_DOMAIN;
                     $prefix_only = strstr($full_email, '@', true) ?: $prefix_val;
                     $quota_label = ($quota_val == 0 || $quota_val === '∞' || $quota_val === 'unlimited')
                         ? '<span class="badge bg-success quota-badge">Illimité</span>'
                         : '<span class="text-muted">' . htmlspecialchars((string)$quota_val) . ' Mo</span>';
+                    $contact     = $contacts[$full_email] ?? [];
+                    $has_contact = !empty($contact['nom']) || !empty($contact['prenom']);
+                    $c_json      = htmlspecialchars(json_encode($contact + ['email' => $full_email]), ENT_QUOTES);
                 ?>
-                <tr>
+                <tr class="email-row" data-email="<?= htmlspecialchars(strtolower($full_email)) ?>">
                   <td class="email-col">
                     <?= htmlspecialchars($full_email) ?>
                     <i class="bi bi-clipboard copy-icon ms-1"
@@ -391,6 +487,11 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                     <?= $used_val !== null ? htmlspecialchars(round((float)$used_val, 1)) . ' Mo' : '—' ?>
                   </td>
                   <td class="text-center">
+                    <button class="btn btn-sm <?= $has_contact ? 'btn-info' : 'btn-outline-secondary' ?> me-1"
+                            onclick='openContact(<?= $c_json ?>)'
+                            title="<?= $has_contact ? 'Voir / modifier la fiche' : 'Créer la fiche' ?>">
+                      <i class="bi bi-person<?= $has_contact ? '-fill' : '' ?>"></i>
+                    </button>
                     <button class="btn btn-sm btn-outline-danger"
                             onclick="confirmDelete('<?= htmlspecialchars($prefix_only, ENT_QUOTES) ?>','<?= htmlspecialchars($full_email, ENT_QUOTES) ?>')"
                             title="Supprimer">
@@ -401,6 +502,11 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                 <?php endforeach; ?>
               </tbody>
             </table>
+          </div>
+          <!-- Pagination -->
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2 border-top">
+            <div class="text-muted small" id="pagination-info"></div>
+            <nav><ul class="pagination pagination-sm mb-0" id="pagination-nav"></ul></nav>
           </div>
           <?php endif; ?>
         </div>
@@ -430,6 +536,62 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
       </div>
 
     </div><!-- /col droite -->
+  </div>
+</div>
+
+<!-- Modal fiche contact -->
+<div class="modal fade" id="contactModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 rounded-4 overflow-hidden">
+      <div class="modal-header text-white border-0" style="background:var(--brand);">
+        <h5 class="modal-title fw-semibold">
+          <i class="bi bi-person-vcard-fill me-2"></i>Fiche contact — <span id="c-title"></span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        <input type="hidden" name="action"  value="save_contact">
+        <input type="hidden" name="c_email" id="c_email">
+        <div class="modal-body py-4">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Nom</label>
+              <input type="text" name="c_nom" id="c_nom" class="form-control" placeholder="Dupont">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Prénom</label>
+              <input type="text" name="c_prenom" id="c_prenom" class="form-control" placeholder="Jean">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Date de naissance</label>
+              <input type="date" name="c_naissance" id="c_naissance" class="form-control">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Pays de naissance</label>
+              <input type="text" name="c_pays" id="c_pays" class="form-control" placeholder="France">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Adresse de résidence</label>
+              <input type="text" name="c_adresse" id="c_adresse" class="form-control" placeholder="12 rue de la Paix, 75001 Paris">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Numéro de téléphone</label>
+              <input type="tel" name="c_telephone" id="c_telephone" class="form-control" placeholder="+33 6 00 00 00 00">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">RIB</label>
+              <input type="text" name="c_rib" id="c_rib" class="form-control font-monospace" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-brand fw-semibold">
+            <i class="bi bi-floppy-fill me-1"></i>Enregistrer la fiche
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -497,12 +659,97 @@ document.getElementById('regenBtn')?.addEventListener('click', () => {
   document.getElementById('pwd-create').value = genPwd();
 });
 
+// Modal fiche contact
+function openContact(data) {
+  document.getElementById('c_email').value      = data.email     || '';
+  document.getElementById('c_nom').value        = data.nom       || '';
+  document.getElementById('c_prenom').value     = data.prenom    || '';
+  document.getElementById('c_naissance').value  = data.naissance || '';
+  document.getElementById('c_pays').value       = data.pays      || '';
+  document.getElementById('c_adresse').value    = data.adresse   || '';
+  document.getElementById('c_telephone').value  = data.telephone || '';
+  document.getElementById('c_rib').value        = data.rib       || '';
+  document.getElementById('c-title').textContent = data.email    || '';
+  new bootstrap.Modal(document.getElementById('contactModal')).show();
+}
+
 // Modal suppression
 function confirmDelete(prefix, fullEmail) {
   document.getElementById('del-prefix').value       = prefix;
   document.getElementById('del-display').textContent = fullEmail;
   new bootstrap.Modal(document.getElementById('deleteModal')).show();
 }
+
+// ── Pagination + Recherche ─────────────────────────────────
+(function () {
+  const table    = document.getElementById('email-table');
+  if (!table) return;
+  const search   = document.getElementById('email-search');
+  const perPage  = document.getElementById('per-page');
+  const nav      = document.getElementById('pagination-nav');
+  const info     = document.getElementById('pagination-info');
+  const badge    = document.getElementById('count-badge');
+  let currentPage = 1;
+
+  function allRows() {
+    return Array.from(table.querySelectorAll('tbody .email-row'));
+  }
+
+  function filtered() {
+    const q = (search?.value || '').toLowerCase().trim();
+    return allRows().filter(r => !q || r.dataset.email.includes(q));
+  }
+
+  function render() {
+    const rows  = filtered();
+    const pp    = parseInt(perPage?.value || '20');
+    const total = rows.length;
+    const pages = pp === 0 ? 1 : Math.ceil(total / pp);
+    if (currentPage > pages) currentPage = 1;
+
+    // Masque tout, affiche la page courante
+    allRows().forEach(r => r.style.display = 'none');
+    const start = pp === 0 ? 0 : (currentPage - 1) * pp;
+    const end   = pp === 0 ? total : start + pp;
+    rows.slice(start, end).forEach(r => r.style.display = '');
+
+    // Info
+    const from = total === 0 ? 0 : start + 1;
+    const to   = Math.min(end, total);
+    if (info) info.textContent = `${from}–${to} sur ${total} adresse${total > 1 ? 's' : ''}`;
+    if (badge) badge.textContent = total;
+
+    // Nav
+    if (!nav) return;
+    nav.innerHTML = '';
+    if (pages <= 1 && pp !== 0) return;
+
+    const mkLi = (label, page, disabled, active) => {
+      const li = document.createElement('li');
+      li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+      li.innerHTML = `<a class="page-link" href="#">${label}</a>`;
+      if (!disabled && !active) li.addEventListener('click', e => { e.preventDefault(); currentPage = page; render(); });
+      return li;
+    };
+
+    nav.appendChild(mkLi('‹', currentPage - 1, currentPage === 1));
+
+    // Fenêtre glissante de 5 pages
+    let pStart = Math.max(1, currentPage - 2);
+    let pEnd   = Math.min(pages, pStart + 4);
+    if (pEnd - pStart < 4) pStart = Math.max(1, pEnd - 4);
+
+    if (pStart > 1) { nav.appendChild(mkLi(1, 1)); if (pStart > 2) nav.appendChild(mkLi('…', null, true)); }
+    for (let p = pStart; p <= pEnd; p++) nav.appendChild(mkLi(p, p, false, p === currentPage));
+    if (pEnd < pages) { if (pEnd < pages - 1) nav.appendChild(mkLi('…', null, true)); nav.appendChild(mkLi(pages, pages)); }
+
+    nav.appendChild(mkLi('›', currentPage + 1, currentPage === pages));
+  }
+
+  search?.addEventListener('input',  () => { currentPage = 1; render(); });
+  perPage?.addEventListener('change', () => { currentPage = 1; render(); });
+  render();
+})();
 </script>
 </body>
 </html>
