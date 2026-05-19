@@ -17,32 +17,93 @@ define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
 define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
 
-// Adresses réelles en Île-de-France (pool aléatoire)
+// Adresses IDF générées côté JS (randomAddress()) — pool statique PHP supprimé
 const IDF_ADDRESSES = [
-    '15 Rue de la Paix, 75002 Paris',
-    '42 Avenue des Champs-Élysées, 75008 Paris',
-    '8 Rue du Faubourg Saint-Antoine, 75011 Paris',
-    '23 Rue de Rivoli, 75004 Paris',
-    '37 Boulevard Voltaire, 75011 Paris',
-    '12 Rue Saint-Lazare, 75009 Paris',
-    '6 Place de la République, 75010 Paris',
-    '19 Rue de Belleville, 75019 Paris',
-    '54 Avenue d\'Italie, 75013 Paris',
-    '3 Rue de la Convention, 75015 Paris',
-    '28 Rue Legendre, 75017 Paris',
-    '11 Rue du Commerce, 75015 Paris',
-    '47 Rue d\'Alembert, 92120 Montrouge',
-    '9 Rue Victor Hugo, 92300 Levallois-Perret',
-    '22 Avenue de la République, 93100 Montreuil',
-    '5 Rue du Général Leclerc, 94000 Créteil',
-    '14 Avenue Foch, 94120 Fontenay-sous-Bois',
-    '31 Rue Carnot, 92110 Clichy',
-    '7 Boulevard Galliéni, 92130 Issy-les-Moulineaux',
-    '18 Rue des Acacias, 91300 Massy',
-    '2 Allée des Magnolias, 78000 Versailles',
-    '25 Rue Jean Jaurès, 93200 Saint-Denis',
-    '40 Rue de Paris, 93000 Bobigny',
-    '16 Avenue du Général de Gaulle, 94700 Maisons-Alfort',
+    // ── 93 Saint-Denis ─────────────────────────────────────
+    '3 Rue de la Boulangerie, 93200 Saint-Denis',
+    '17 Avenue du Président Wilson, 93200 Saint-Denis',
+    '29 Rue Gabriel Péri, 93200 Saint-Denis',
+    '8 Impasse des Lilas, 93200 Saint-Denis',
+    '45 Boulevard Jules Guesde, 93200 Saint-Denis',
+    '12 Rue Danièle Casanova, 93200 Saint-Denis',
+    '6 Allée des Roses, 93200 Saint-Denis',
+    '33 Rue du Landy, 93200 Saint-Denis',
+    // ── 93 Bobigny ─────────────────────────────────────────
+    '2 Avenue Henri Barbusse, 93000 Bobigny',
+    '19 Rue Édouard Vaillant, 93000 Bobigny',
+    '41 Boulevard Lénine, 93000 Bobigny',
+    '7 Rue Pierre Curie, 93000 Bobigny',
+    '24 Avenue Paul Vaillant-Couturier, 93000 Bobigny',
+    // ── 93 Montreuil ────────────────────────────────────────
+    '11 Rue de Paris, 93100 Montreuil',
+    '38 Avenue de la République, 93100 Montreuil',
+    '5 Rue Robespierre, 93100 Montreuil',
+    '22 Boulevard Rouget de Lisle, 93100 Montreuil',
+    '14 Rue Jean-Jaurès, 93100 Montreuil',
+    // ── 93 Aubervilliers ────────────────────────────────────
+    '16 Rue Édouard Poisson, 93300 Aubervilliers',
+    '30 Avenue de la République, 93300 Aubervilliers',
+    '9 Rue Heurtault, 93300 Aubervilliers',
+    '47 Rue du Moutier, 93300 Aubervilliers',
+    // ── 93 Saint-Ouen ───────────────────────────────────────
+    '4 Rue Garibaldi, 93400 Saint-Ouen',
+    '21 Avenue Michelet, 93400 Saint-Ouen',
+    '13 Rue Albert Dhalenne, 93400 Saint-Ouen',
+    '36 Boulevard Victor Hugo, 93400 Saint-Ouen',
+    // ── 93 Pantin ───────────────────────────────────────────
+    '8 Rue Hoche, 93500 Pantin',
+    '27 Avenue Général Leclerc, 93500 Pantin',
+    '15 Rue du Pré-Saint-Gervais, 93500 Pantin',
+    '42 Rue Cartier-Bresson, 93500 Pantin',
+    // ── 93 Aulnay-sous-Bois ─────────────────────────────────
+    '19 Rue de Mitry, 93600 Aulnay-sous-Bois',
+    '6 Allée des Pinsons, 93600 Aulnay-sous-Bois',
+    '31 Avenue du Général de Gaulle, 93600 Aulnay-sous-Bois',
+    '10 Rue des Écoles, 93600 Aulnay-sous-Bois',
+    // ── 93 Drancy ────────────────────────────────────────────
+    '5 Avenue Jean Jaurès, 93700 Drancy',
+    '23 Rue Marcel Cachin, 93700 Drancy',
+    '14 Boulevard Henri Barbusse, 93700 Drancy',
+    // ── 93 La Courneuve ─────────────────────────────────────
+    '3 Allée Renoir, 93120 La Courneuve',
+    '18 Avenue Paul Vaillant-Couturier, 93120 La Courneuve',
+    '9 Rue Léo Lagrange, 93120 La Courneuve',
+    // ── 93 Épinay-sur-Seine ─────────────────────────────────
+    '11 Rue Waldeck-Rousseau, 93800 Épinay-sur-Seine',
+    '26 Boulevard de la République, 93800 Épinay-sur-Seine',
+    '7 Impasse des Chênes, 93800 Épinay-sur-Seine',
+    // ── 93 Noisy-le-Grand ───────────────────────────────────
+    '4 Allée des Marronniers, 93160 Noisy-le-Grand',
+    '17 Rue de Malnoue, 93160 Noisy-le-Grand',
+    '32 Boulevard du Mont d\'Est, 93160 Noisy-le-Grand',
+    // ── 93 Villepinte ────────────────────────────────────────
+    '8 Rue des Tournelles, 93420 Villepinte',
+    '20 Allée du Bourget, 93420 Villepinte',
+    // ── 93 Stains ────────────────────────────────────────────
+    '5 Rue du 8 Mai 1945, 93240 Stains',
+    '13 Avenue Lénine, 93240 Stains',
+    // ── 93 Bondy ─────────────────────────────────────────────
+    '9 Rue Ernest Renan, 93140 Bondy',
+    '27 Boulevard Louis Blanc, 93140 Bondy',
+    '16 Avenue de la République, 93140 Bondy',
+    // ── 93 Pierrefitte-sur-Seine ─────────────────────────────
+    '3 Rue Henri Barbusse, 93380 Pierrefitte-sur-Seine',
+    '19 Avenue du 8 Mai 1945, 93380 Pierrefitte-sur-Seine',
+    // ── Paris (19e / 18e / 20e proches 93) ──────────────────
+    '14 Rue de Crimée, 75019 Paris',
+    '28 Rue de Belleville, 75019 Paris',
+    '7 Rue de la Villette, 75019 Paris',
+    '35 Boulevard de la Chapelle, 75018 Paris',
+    '6 Rue Marx Dormoy, 75018 Paris',
+    '22 Rue des Pyrénées, 75020 Paris',
+    '9 Rue du Surmelin, 75020 Paris',
+    // ── 92 limitrophe ────────────────────────────────────────
+    '11 Rue du Général Leclerc, 92110 Clichy',
+    '4 Rue Victor Hugo, 92230 Gennevilliers',
+    '18 Avenue Gabriel Péri, 92230 Gennevilliers',
+    // ── 94 ───────────────────────────────────────────────────
+    '6 Rue Robespierre, 94200 Ivry-sur-Seine',
+    '23 Avenue de la République, 94700 Maisons-Alfort',
 ];
 // ============================================================
 
@@ -160,12 +221,16 @@ function get_db(): PDO
         telephone    TEXT DEFAULT '',
         rib          TEXT DEFAULT '',
         bic          TEXT DEFAULT '',
+        prestation   TEXT DEFAULT '',
         updated_at   TEXT DEFAULT ''
     )");
-    // Migration : ajoute bic si la table existait avant
+    // Migrations : ajoute colonnes manquantes si table existait avant
     $cols = array_column($db->query("PRAGMA table_info(contacts)")->fetchAll(PDO::FETCH_ASSOC), 'name');
     if (!in_array('bic', $cols)) {
         $db->exec("ALTER TABLE contacts ADD COLUMN bic TEXT DEFAULT ''");
+    }
+    if (!in_array('prestation', $cols)) {
+        $db->exec("ALTER TABLE contacts ADD COLUMN prestation TEXT DEFAULT ''");
     }
     return $db;
 }
@@ -184,11 +249,11 @@ function save_contact(string $email, array $d): string
 {
     try {
         get_db()->prepare("INSERT OR REPLACE INTO contacts
-            (email,nom,prenom,naissance,adresse,pays,telephone,rib,bic,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)")
+            (email,nom,prenom,naissance,adresse,pays,telephone,rib,bic,prestation,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)")
         ->execute([$email, $d['nom'] ?? '', $d['prenom'] ?? '', $d['naissance'] ?? '',
                    $d['adresse'] ?? '', $d['pays'] ?? '', $d['telephone'] ?? '',
-                   $d['rib'] ?? '', $d['bic'] ?? '', date('Y-m-d H:i:s')]);
+                   $d['rib'] ?? '', $d['bic'] ?? '', $d['prestation'] ?? '', date('Y-m-d H:i:s')]);
         return '';
     } catch (Exception $e) {
         return $e->getMessage();
@@ -212,8 +277,9 @@ if ($authenticated) {
         $naissance = trim($_POST['naissance'] ?? '');
         $pays      = trim($_POST['pays']      ?? '');
         $adresse   = trim($_POST['adresse']   ?? '');
-        $rib       = trim($_POST['rib']       ?? '');
-        $bic       = trim($_POST['bic']       ?? '');
+        $rib        = trim($_POST['rib']        ?? '');
+        $bic        = trim($_POST['bic']        ?? '');
+        $prestation = trim($_POST['prestation'] ?? '');
 
         if (!$nom || !$prenom || !$prefix) {
             $flash = ['type' => 'danger', 'msg' => 'Nom, prénom et identifiant email sont obligatoires.'];
@@ -229,8 +295,12 @@ if ($authenticated) {
                 'quota'    => 250,
             ]);
             if ($result['ok'] || strpos(strtolower($result['error'] ?? ''), 'exist') !== false) {
-                $dberr = save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic'));
-                unset($_SESSION['accounts_cache']);
+                $dberr = save_contact($full_email, compact('nom','prenom','naissance','adresse','pays','telephone','rib','bic','prestation'));
+                // Ajoute au cache en place pour affichage immédiat sans rechargement
+                $new_entry = ['mailUser' => $prefix, 'quota' => 250, 'disk_used' => 0];
+                if (!isset($_SESSION['accounts_cache'])) $_SESSION['accounts_cache'] = [];
+                array_unshift($_SESSION['accounts_cache'], $new_entry);
+                $_SESSION['accounts_cache_ts'] = time();
                 $flash = $dberr
                     ? ['type' => 'danger',  'msg' => "Email créé mais erreur fiche : $dberr"]
                     : ['type' => 'success', 'msg' => "<strong>{$prenom} {$nom}</strong> ajouté — email <strong>{$full_email}</strong> créé."];
@@ -252,7 +322,13 @@ if ($authenticated) {
                 'mailUser' => $prefix,
             ]);
             if ($result['ok']) {
-                unset($_SESSION['accounts_cache']);
+                // Retire du cache en place pour affichage immédiat
+                if (isset($_SESSION['accounts_cache'])) {
+                    $_SESSION['accounts_cache'] = array_values(array_filter(
+                        $_SESSION['accounts_cache'],
+                        fn($a) => ($a['mailUser'] ?? $a['email'] ?? '') !== $prefix
+                    ));
+                }
                 $flash = ['type' => 'success', 'msg' => "Adresse <strong>{$prefix}@" . MAIL_DOMAIN . "</strong> supprimée."];
             } else {
                 $flash = ['type' => 'danger', 'msg' => 'Erreur API : ' . htmlspecialchars($result['error'])];
@@ -292,8 +368,9 @@ if ($authenticated) {
                 'adresse'   => trim($_POST['c_adresse']   ?? ''),
                 'pays'      => trim($_POST['c_pays']      ?? ''),
                 'telephone' => trim($_POST['c_telephone'] ?? ''),
-                'rib'       => trim($_POST['c_rib']       ?? ''),
-                'bic'       => trim($_POST['c_bic']       ?? ''),
+                'rib'        => trim($_POST['c_rib']        ?? ''),
+                'bic'        => trim($_POST['c_bic']        ?? ''),
+                'prestation' => trim($_POST['c_prestation'] ?? ''),
             ]);
             $flash = $dberr
                 ? ['type' => 'danger',  'msg' => "Erreur enregistrement : $dberr"]
@@ -343,8 +420,7 @@ function strong_password(int $len = 16): string
     return $out;
 }
 
-// Adresse IDF aléatoire pour pré-remplissage
-$random_address = IDF_ADDRESSES[array_rand(IDF_ADDRESSES)];
+// Adresse IDF : pré-remplissage géré côté JS (randomAddress())
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -522,8 +598,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               <label class="form-label fw-semibold mb-1">Adresse de résidence</label>
               <div class="input-group">
                 <input type="text" name="adresse" id="f-adresse" class="form-control"
-                       placeholder="Adresse complète"
-                       value="<?= htmlspecialchars($random_address) ?>">
+                       placeholder="Adresse complète">
                 <button type="button" class="btn btn-outline-secondary" id="rand-addr-btn" title="Adresse aléatoire IDF">
                   <i class="bi bi-shuffle"></i>
                 </button>
@@ -532,7 +607,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
             </div>
 
             <!-- RIB + BIC -->
-            <div class="row g-2 mb-3">
+            <div class="row g-2 mb-2">
               <div class="col-8">
                 <label class="form-label fw-semibold mb-1">RIB</label>
                 <input type="text" name="rib" id="f-rib" class="form-control font-monospace"
@@ -543,6 +618,18 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                 <input type="text" name="bic" id="f-bic" class="form-control font-monospace"
                        placeholder="BNPAFRPP">
               </div>
+            </div>
+
+            <!-- Type de prestation -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold mb-1">Type de prestation</label>
+              <select name="prestation" id="f-prestation" class="form-select">
+                <option value="">— Sélectionner —</option>
+                <option value="Titre de séjour">Titre de séjour</option>
+                <option value="Logement">Logement</option>
+                <option value="Naturalisation">Naturalisation</option>
+                <option value="Autre">Autre</option>
+              </select>
             </div>
 
             <button type="submit" class="btn btn-brand w-100 fw-semibold py-2">
@@ -750,6 +837,16 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
               <input type="text" name="c_bic" id="c_bic" class="form-control font-monospace"
                      placeholder="BNPAFRPP">
             </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Type de prestation</label>
+              <select name="c_prestation" id="c_prestation" class="form-select">
+                <option value="">— Sélectionner —</option>
+                <option value="Titre de séjour">Titre de séjour</option>
+                <option value="Logement">Logement</option>
+                <option value="Naturalisation">Naturalisation</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="modal-footer border-0 bg-light">
@@ -796,8 +893,128 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ── Adresses IDF côté client (même liste que PHP) ──────────
-const IDF_ADDRESSES = <?= json_encode(IDF_ADDRESSES) ?>;
+// ── Pool de vraies adresses IDF (majorité 93) ──────────────
+const IDF_ADDRESSES = [
+  // Saint-Denis 93200
+  '4 Rue de la République, 93200 Saint-Denis',
+  '17 Avenue du Président Wilson, 93200 Saint-Denis',
+  '23 Rue Gabriel Péri, 93200 Saint-Denis',
+  '8 Rue du Landy, 93200 Saint-Denis',
+  '31 Boulevard Jules Guesde, 93200 Saint-Denis',
+  '12 Rue Danièle Casanova, 93200 Saint-Denis',
+  '5 Rue de la Boulangerie, 93200 Saint-Denis',
+  '19 Rue de Strasbourg, 93200 Saint-Denis',
+  '3 Rue Paul Éluard, 93200 Saint-Denis',
+  '44 Boulevard Marcel Sembat, 93200 Saint-Denis',
+  '7 Rue Victor Hugo, 93200 Saint-Denis',
+  '28 Avenue de Stalingrad, 93200 Saint-Denis',
+  '11 Rue Proudhon, 93200 Saint-Denis',
+  '2 Avenue du 8 Mai 1945, 93200 Saint-Denis',
+  '36 Rue Franciade, 93200 Saint-Denis',
+  '9 Rue de la Légion d\'Honneur, 93200 Saint-Denis',
+  '53 Rue du Général Leclerc, 93200 Saint-Denis',
+  '14 Rue Christophe Colomb, 93200 Saint-Denis',
+  // Bobigny 93000
+  '6 Avenue Henri Barbusse, 93000 Bobigny',
+  '22 Rue Édouard Vaillant, 93000 Bobigny',
+  '38 Boulevard Lénine, 93000 Bobigny',
+  '15 Avenue Paul Vaillant-Couturier, 93000 Bobigny',
+  '3 Avenue Jean Jaurès, 93000 Bobigny',
+  '27 Boulevard Karl Marx, 93000 Bobigny',
+  '9 Avenue Salvador Allende, 93000 Bobigny',
+  '41 Rue de la République, 93000 Bobigny',
+  // Montreuil 93100
+  '18 Rue de Paris, 93100 Montreuil',
+  '34 Avenue de la République, 93100 Montreuil',
+  '7 Rue Robespierre, 93100 Montreuil',
+  '25 Rue du Capitaine Dreyfus, 93100 Montreuil',
+  '11 Avenue de Stalingrad, 93100 Montreuil',
+  '46 Rue Étienne Marcel, 93100 Montreuil',
+  '13 Boulevard Rouget de Lisle, 93100 Montreuil',
+  '5 Rue de la Fraternité, 93100 Montreuil',
+  // Aubervilliers 93300
+  '20 Rue Édouard Poisson, 93300 Aubervilliers',
+  '8 Avenue de la République, 93300 Aubervilliers',
+  '33 Rue du Moutier, 93300 Aubervilliers',
+  '16 Rue Heurtault, 93300 Aubervilliers',
+  '29 Boulevard Félix Faure, 93300 Aubervilliers',
+  '4 Rue de la Commune de Paris, 93300 Aubervilliers',
+  '51 Avenue Victor Hugo, 93300 Aubervilliers',
+  // Saint-Ouen 93400
+  '6 Rue Garibaldi, 93400 Saint-Ouen',
+  '24 Avenue Michelet, 93400 Saint-Ouen',
+  '37 Boulevard Victor Hugo, 93400 Saint-Ouen',
+  '12 Rue du Docteur Bauer, 93400 Saint-Ouen',
+  '19 Avenue Gabriel Péri, 93400 Saint-Ouen',
+  '8 Rue Albert Dhalenne, 93400 Saint-Ouen',
+  // Pantin 93500
+  '14 Rue Hoche, 93500 Pantin',
+  '29 Avenue du Général Leclerc, 93500 Pantin',
+  '6 Rue Cartier-Bresson, 93500 Pantin',
+  '21 Avenue Jean Lolive, 93500 Pantin',
+  '9 Rue du Pré-Saint-Gervais, 93500 Pantin',
+  '43 Rue Scandicci, 93500 Pantin',
+  // Aulnay-sous-Bois 93600
+  '17 Avenue du Général de Gaulle, 93600 Aulnay-sous-Bois',
+  '5 Rue de Mitry, 93600 Aulnay-sous-Bois',
+  '32 Boulevard de Strasbourg, 93600 Aulnay-sous-Bois',
+  '11 Rue des Écoles, 93600 Aulnay-sous-Bois',
+  '28 Avenue de Savigny, 93600 Aulnay-sous-Bois',
+  '7 Rue du Moulin Basset, 93600 Aulnay-sous-Bois',
+  // Drancy 93700
+  '9 Avenue Jean Jaurès, 93700 Drancy',
+  '26 Rue Marcel Cachin, 93700 Drancy',
+  '14 Boulevard Henri Barbusse, 93700 Drancy',
+  '38 Avenue du Général de Gaulle, 93700 Drancy',
+  '3 Rue Anatole France, 93700 Drancy',
+  // La Courneuve 93120
+  '5 Avenue Paul Vaillant-Couturier, 93120 La Courneuve',
+  '18 Rue Léo Lagrange, 93120 La Courneuve',
+  '7 Rue Gabriel Salagnac, 93120 La Courneuve',
+  '23 Avenue Lénine, 93120 La Courneuve',
+  '11 Rue du 8 Mai 1945, 93120 La Courneuve',
+  // Épinay-sur-Seine 93800
+  '14 Boulevard de la République, 93800 Épinay-sur-Seine',
+  '6 Rue Waldeck-Rousseau, 93800 Épinay-sur-Seine',
+  '29 Avenue de la Libération, 93800 Épinay-sur-Seine',
+  '17 Rue Gaston Philippe, 93800 Épinay-sur-Seine',
+  // Bondy 93140
+  '8 Boulevard Louis Blanc, 93140 Bondy',
+  '21 Avenue de la République, 93140 Bondy',
+  '13 Rue Ernest Renan, 93140 Bondy',
+  '35 Avenue du Général de Gaulle, 93140 Bondy',
+  // Stains 93240
+  '4 Rue du 8 Mai 1945, 93240 Stains',
+  '19 Avenue Lénine, 93240 Stains',
+  '7 Rue Politzer, 93240 Stains',
+  // Pierrefitte-sur-Seine 93380
+  '11 Rue Henri Barbusse, 93380 Pierrefitte-sur-Seine',
+  '26 Avenue du 8 Mai 1945, 93380 Pierrefitte-sur-Seine',
+  '8 Rue de la Paix, 93380 Pierrefitte-sur-Seine',
+  // Villepinte 93420
+  '5 Rue des Tournelles, 93420 Villepinte',
+  '18 Avenue du Général Leclerc, 93420 Villepinte',
+  // Romainville 93230
+  '12 Rue Jules Ferry, 93230 Romainville',
+  '7 Avenue Anatole France, 93230 Romainville',
+  '24 Rue du Général Leclerc, 93230 Romainville',
+  // Noisy-le-Grand 93160
+  '9 Boulevard du Mont d\'Est, 93160 Noisy-le-Grand',
+  '31 Rue de Malnoue, 93160 Noisy-le-Grand',
+  '6 Avenue Aristide Briand, 93160 Noisy-le-Grand',
+  // Paris (18e/19e/20e)
+  '14 Rue de Crimée, 75019 Paris',
+  '22 Rue de Belleville, 75019 Paris',
+  '35 Boulevard de la Chapelle, 75018 Paris',
+  '8 Rue Marx Dormoy, 75018 Paris',
+  '17 Rue des Pyrénées, 75020 Paris',
+  // Gennevilliers 92230
+  '6 Avenue Gabriel Péri, 92230 Gennevilliers',
+  '19 Rue Victor Hugo, 92230 Gennevilliers',
+];
+function randomAddress() {
+  return IDF_ADDRESSES[Math.floor(Math.random() * IDF_ADDRESSES.length)];
+}
 
 // ── Utilitaire slugify (retire accents, met en minuscules) ─
 function slugify(str) {
@@ -819,10 +1036,13 @@ document.getElementById('f-prenom')?.addEventListener('blur',  updatePrefix);
 document.getElementById('f-nom')?.addEventListener('blur',    updatePrefix);
 document.getElementById('regen-prefix-btn')?.addEventListener('click', updatePrefix);
 
+// Pré-remplit l'adresse au chargement avec une adresse générée aléatoirement
+if (document.getElementById('f-adresse'))
+  document.getElementById('f-adresse').value = randomAddress();
+
 // ── Adresse aléatoire IDF ──────────────────────────────────
 document.getElementById('rand-addr-btn')?.addEventListener('click', () => {
-  const a = IDF_ADDRESSES[Math.floor(Math.random() * IDF_ADDRESSES.length)];
-  document.getElementById('f-adresse').value = a;
+  document.getElementById('f-adresse').value = randomAddress();
 });
 
 // ── Copie presse-papier ────────────────────────────────────
@@ -854,8 +1074,9 @@ function openContact(data) {
   document.getElementById('c_pays').value       = data.pays      || '';
   document.getElementById('c_adresse').value    = data.adresse   || '';
   document.getElementById('c_telephone').value  = data.telephone || '';
-  document.getElementById('c_rib').value        = data.rib       || '';
-  document.getElementById('c_bic').value        = data.bic       || '';
+  document.getElementById('c_rib').value        = data.rib        || '';
+  document.getElementById('c_bic').value        = data.bic        || '';
+  document.getElementById('c_prestation').value = data.prestation || '';
   document.getElementById('c-title').textContent = email;
 
   // Bouton copie email
