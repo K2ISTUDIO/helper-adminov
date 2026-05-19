@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.php'
       - '.github/workflows/deploy.yml'
+      - '.user.ini'
 
 jobs:
   deploy:
@@ -25,5 +26,6 @@ jobs:
             index.php
             info.php
             purge.php
+            .user.ini
           log-level: verbose
           force-upload: true
