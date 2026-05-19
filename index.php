@@ -107,7 +107,16 @@ const IDF_ADDRESSES = [
 ];
 // ============================================================
 
-if (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
+// Vider OPcache complet via ?purge=1 (avant session_start)
+if (isset($_GET['purge'])) {
+    if (function_exists('opcache_reset'))      opcache_reset();
+    elseif (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
+    header('Content-Type: text/plain');
+    echo 'OPcache vidé — ' . date('H:i:s') . ' — <a href="index.php">retour</a>';
+    exit;
+}
+if (function_exists('opcache_reset')) opcache_reset();
+elseif (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
 
 // Log toutes les erreurs fatales dans un fichier accessible
 $_log = __DIR__ . '/adminov_debug.log';
