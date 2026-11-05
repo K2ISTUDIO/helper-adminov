@@ -21,7 +21,7 @@ jobs:
           username: deploy@formails.fr
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir:  ./
-          server-dir: public_html/adminov/
+          server-dir: public_html/formadom/
           include: |
             index.php
             info.php
