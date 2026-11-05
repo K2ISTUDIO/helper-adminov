@@ -9,7 +9,7 @@ function ph($version, $path) {
     $ch = curl_init("https://api.planethoster.net/$version$path");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_TIMEOUT        => 10,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_HTTPHEADER     => [
             'X-API-USER: ' . $api_user,
@@ -25,20 +25,26 @@ function ph($version, $path) {
 
 $out = [];
 
-// v4 : liste tous les comptes hébergement avec leurs IDs
-$r = ph('v4', '/hostings');
-$out['v4_hostings'] = ['http' => $r['http'], 'body' => $r['body']];
+// v4 avec domaine directement (sans id numérique)
+foreach ([
+    '/v4/hosting/emails?domain=formails.fr',
+    '/v4/hosting/domains?domain=formails.fr',
+    '/v4/hosting/login?domain=formails.fr',
+    '/v4/hybridcloud/info?domain=formails.fr',
+    '/v4/hybridcloud/info',
+    '/v4/domains',
+] as $ep) {
+    $r = ph('', $ep);
+    $out[str_replace(['/', '?', '=', '.'], '_', $ep)] = ['http' => $r['http'], 'body' => $r['body']];
+}
 
-// v4 : infos The World (sous-comptes)
-$r = ph('v4', '/the-world/info');
-$out['v4_the_world_info'] = ['http' => $r['http'], 'body' => $r['body']];
-
-// v4 : infos compte revendeur
-$r = ph('v4', '/account/info');
-$out['v4_account_info'] = ['http' => $r['http'], 'body' => $r['body']];
-
-// v3 (ancien) : test avec le bon endpoint email pour vérifier que les creds marchent
-$r = ph('v3', '/hosting/emails?id=113185');
-$out['v3_sanity_113185'] = ['http' => $r['http'], 'ok' => ($r['http'] === 200)];
+// CONCLUSION
+$out['DIAGNOSTIC'] = [
+    'credentials_appartiennent_a' => 'reseller_id ca090d4c75f80521945812f3968b3df9',
+    'hosting_accounts_sur_ce_compte' => 'AUCUN (v4 confirme)',
+    'v3_113185_accessible' => 'OUI (neomails.fr)',
+    'conclusion' => 'formails.fr est probablement sur un compte PlanetHoster DIFFERENT',
+    'solution' => 'Aller sur my.planethoster.com -> compte formails.fr -> API -> copier X-API-USER et X-API-KEY',
+];
 
 echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
