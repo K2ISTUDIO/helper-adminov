@@ -26,6 +26,7 @@ jobs:
             index.php
             info.php
             purge.php
+            diag.php
             .user.ini
           log-level: verbose
           force-upload: true
