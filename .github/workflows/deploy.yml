@@ -17,7 +17,7 @@ jobs:
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server:   node242-eu.n0c.com
+          server:   node19-ca.n0c.com
           username: deploy@formails.fr
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir:  ./
