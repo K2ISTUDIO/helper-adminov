@@ -4,9 +4,9 @@
 // ============================================================
 define('PH_API_USER',  'ca090d4c75f80521945812f3968b3df9');
 define('PH_API_KEY',   'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
-define('MAIL_DOMAIN',  'neomails.fr');
+define('MAIL_DOMAIN',  'formails.fr');
 define('APP_PASSWORD', 'S@rix93100');
-define('APP_TITLE',    'Adminov — Emails neomails.fr');
+define('APP_TITLE',    'Adminov — Emails formails.fr');
 define('PH_API_BASE',  'https://api.planethoster.net/v3');
 define('SESSION_TTL',  3600); // 1 heure
 // ============================================================

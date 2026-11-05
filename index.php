@@ -7,7 +7,7 @@ error_reporting(E_ALL);
 // ============================================================
 define('PH_API_USER',        'ca090d4c75f80521945812f3968b3df9');
 define('PH_API_KEY',         'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859');
-define('MAIL_DOMAIN',        'neomails.fr');
+define('MAIL_DOMAIN',        'formails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
 define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
@@ -515,7 +515,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
       <span class="badge bg-secondary ms-2" style="font-size:.65rem;">v<?= APP_VERSION ?></span>
     </span>
     <div class="ms-auto d-flex gap-2">
-      <a href="https://neomails.fr/webmail/" target="_blank" class="btn btn-sm btn-light px-3">
+      <a href="https://formails.fr/webmail/" target="_blank" class="btn btn-sm btn-light px-3">
         <i class="bi bi-envelope-open-fill me-1"></i>Webmail
       </a>
       <form method="post">
@@ -765,7 +765,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
                             title="<?= $has_contact ? 'Voir / modifier la fiche' : 'Créer la fiche' ?>">
                       <i class="bi bi-person<?= $has_contact ? '-fill' : '' ?>"></i>
                     </button>
-                    <a href="https://neomails.fr/webmail/" target="_blank"
+                    <a href="https://formails.fr/webmail/" target="_blank"
                        class="btn btn-sm btn-outline-primary me-1" title="Ouvrir le webmail">
                       <i class="bi bi-envelope-open"></i>
                     </a>
