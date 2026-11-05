@@ -1,5 +1,5 @@
 <?php
-// Diagnostic temporaire — supprimer après usage
+set_time_limit(60);
 header('Content-Type: application/json');
 
 $api_user = 'ca090d4c75f80521945812f3968b3df9';
@@ -12,7 +12,8 @@ function ph($method, $path, $body = []) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST  => $method,
-        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_HTTPHEADER     => [
             'X-API-USER: ' . $api_user,
             'X-API-KEY: '  . $api_key,
@@ -23,73 +24,72 @@ function ph($method, $path, $body = []) {
     if ($body) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
     $res  = curl_exec($ch);
     $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
     curl_close($ch);
-    return ['http' => $http, 'body' => json_decode($res, true) ?? $res];
+    return ['http' => $http, 'body' => json_decode($res, true) ?? $res, 'err' => $err ?: null];
 }
 
 $results = [];
+$username = 'atqadcksav'; // username N0C de formails.fr
 
-// Essaie des endpoints de liste de comptes N0C
-foreach ([
-    '/n0c/accounts',
-    '/n0c/account/list',
-    '/reseller/n0c/accounts',
-    '/world/accounts',
-    '/hosting/list',
-    '/account/list',
-] as $ep) {
-    $r = ph('GET', $ep);
-    if ($r['http'] < 400) {
-        $results['listing_' . str_replace('/', '_', $ep)] = $r;
-    } else {
-        $results['listing_' . str_replace('/', '_', $ep)] = ['http' => $r['http']];
-    }
-}
-
-// Scan de plages d'IDs — cherche formails.fr
-$scan_ranges = [
-    // Plage proche de neomails (113185)
-    range(113100, 113200),
-    // Plages plus lointaines — node19-ca est canadien, IDs peut-être différents
-    range(50000, 50050),
-    range(80000, 80050),
-    range(150000, 150050),
-    range(200000, 200050),
-    range(1000, 1100),
+// Endpoints qui acceptent un username
+$endpoints_with_user = [
+    "/hosting/account?username=$username",
+    "/hosting/info?username=$username",
+    "/n0c/account?username=$username",
+    "/n0c/account?user=$username",
+    "/hosting?username=$username",
+    "/reseller/hosting?username=$username",
 ];
 
-$found = null;
-foreach ($scan_ranges as $range) {
-    foreach ($range as $id) {
-        if ($id === 113185) continue; // déjà testé
-        $r = ph('GET', '/hosting/emails?id=' . $id . '&domain=formails.fr');
-        if ($r['http'] === 200 && isset($r['body']['success']) && $r['body']['success']) {
-            // Vérifie si ce compte a formails.fr
-            $has_formails = false;
-            if (!empty($r['body']['data'])) {
-                foreach ($r['body']['data'] as $email) {
-                    if (strpos($email['domain'], 'formails') !== false) {
-                        $has_formails = true;
-                        break;
-                    }
-                }
-            }
-            if ($has_formails) {
-                $found = ['id' => $id, 'data' => $r['body']];
-                break 2;
-            }
-            // Compte existe mais pas de formails — log quand même si pas trop d'entrées
-            if (empty($r['body']['data'])) {
-                $results['empty_account_' . $id] = ['exists' => true, 'domain_count' => 0];
+foreach ($endpoints_with_user as $ep) {
+    $r = ph('GET', $ep);
+    $results['by_username_' . basename(strtok($ep, '?'))] = ['ep' => $ep, 'http' => $r['http'], 'body' => $r['body']];
+}
+
+// Endpoint qui liste tous les comptes du revendeur
+foreach (['/n0c/accounts', '/hosting/accounts', '/reseller/accounts', '/world/n0c/accounts'] as $ep) {
+    $r = ph('GET', $ep);
+    $results['list_' . basename($ep)] = ['http' => $r['http'], 'body' => $r['http'] < 400 ? $r['body'] : 'error'];
+}
+
+// Scan ciblé autour des IDs connus (113185=neomails, 113188=adminov)
+// Cherche un compte qui a le username atqadcksav
+// On teste l'endpoint /hosting/emails, en cherchant formails.fr dans la réponse
+$scan_found = null;
+$ids_to_try = array_merge(
+    range(113150, 113250),
+    range(112000, 112100),
+    range(114000, 114100)
+);
+
+foreach ($ids_to_try as $id) {
+    if ($id === 113185 || $id === 113188) continue;
+    $r = ph('GET', "/hosting/emails?id=$id&domain=formails.fr");
+    if ($r['http'] === 200 && isset($r['body']['success']) && $r['body']['success']) {
+        // Vérifie si ce compte a formails.fr
+        $data = $r['body']['data'] ?? [];
+        $has_formails = false;
+        foreach ($data as $email) {
+            if (isset($email['domain']) && stripos($email['domain'], 'formails') !== false) {
+                $has_formails = true;
+                break;
             }
         }
+        // Même si vide, le compte existe — log-le
+        if ($has_formails) {
+            $scan_found = ['id' => $id, 'data' => $r['body']];
+            break;
+        }
+        // Compte qui existe mais sans emails formails — pourrait être le bon (vide)
+        $results["account_exists_$id"] = ['emails_count' => count($data), 'sample_domain' => $data[0]['domain'] ?? 'none'];
     }
 }
 
-if ($found) {
-    $results['FORMAILS_ACCOUNT_FOUND'] = $found;
+if ($scan_found) {
+    $results['FORMAILS_ID_FOUND'] = $scan_found;
 } else {
-    $results['scan_result'] = 'not found in scanned ranges';
+    $results['scan_note'] = 'Pas trouvé dans la plage scannée';
 }
 
 echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
