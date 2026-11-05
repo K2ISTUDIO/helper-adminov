@@ -1,12 +1,11 @@
 <?php
-set_time_limit(110);
+set_time_limit(120);
 header('Content-Type: application/json');
 
 $api_user = 'ca090d4c75f80521945812f3968b3df9';
 $api_key  = 'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859';
 $base     = 'https://api.planethoster.net/v3';
-$username = 'atqadcksav';
-$known    = [113185, 113188]; // neomails, adminov
+$known    = [113185, 113188]; // neomails=113185, adminov=113188 — skip
 
 function ph($path) {
     global $api_user, $api_key, $base;
@@ -28,85 +27,70 @@ function ph($path) {
     return ['http' => $http, 'body' => json_decode($res, true)];
 }
 
-function check_id($id) {
-    // Returns: null=not found, []= found but 0 emails, [domain=>..., count=>N]=found with emails
-    $r = ph("/hosting/emails?id=$id");
-    if ($r['http'] !== 200 || !isset($r['body']['success']) || !$r['body']['success']) return null;
-    $data   = $r['body']['data'] ?? [];
-    $domain = $data[0]['domain'] ?? 'none';
-    return ['domain' => $domain, 'count' => count($data), 'emails_sample' => array_slice(array_column($data, 'email'), 0, 3)];
-}
+$results = [];
+$t0      = microtime(true);
 
-$results  = [];
-$t0       = microtime(true);
+// ── Phase 0 : scan pas 1 de 113000 à 115000 ──────────────
+// On sait que neomails=113185, adminov=113188. Formails.fr devrait
+// être dans la même plage si créé via le même revendeur.
+$formails_id = null;
+$all_found   = [];
 
-// ── Phase 0 : endpoints par username ──────────────────────
-foreach ([
-    "/hosting/account?username=$username",
-    "/hosting/info?username=$username",
-    "/n0c/account?username=$username",
-    "/n0c/account?user=$username",
-    "/world/n0c/account?username=$username",
-    "/world/hosting/account?username=$username",
-    "/reseller/hosting?username=$username",
-] as $ep) {
-    $r = ph($ep);
-    if ($r['http'] === 200) {
-        $results['username_HIT'] = ['ep' => $ep, 'body' => $r['body']];
-        break;
-    }
-}
-
-// ── Phase 1 : scan large pas 10000 (0 → 2 000 000) ───────
-// Cherche un compte dont les emails ont domain=formails.fr
-$hit10k    = null;
-$zero_cands = [];
-for ($id = 10000; $id <= 2000000; $id += 10000) {
+for ($id = 112500; $id <= 115500; $id++) {
     if (in_array($id, $known)) continue;
-    $info = check_id($id);
-    if ($info === null) continue; // pas de compte
-    if (stripos($info['domain'], 'formails') !== false) {
-        $results['FORMAILS_ID_FOUND'] = ['id' => $id, 'info' => $info];
-        $hit10k = $id;
-        break;
-    }
-    if ($info['count'] === 0) {
-        $zero_cands[] = $id; // compte vide, candidat possible
-    }
-    if (microtime(true) - $t0 > 55) {
-        $results['phase1_stopped_at'] = $id;
-        break;
-    }
-}
 
-// ── Phase 2 : affine dans le bloc trouvé (pas 1000) ───────
-if ($hit10k && !isset($results['FORMAILS_ID_FOUND'])) {
-    for ($id = max(1, $hit10k - 10000); $id <= $hit10k + 10000; $id += 1000) {
-        if (in_array($id, $known)) continue;
-        $info = check_id($id);
-        if ($info && stripos($info['domain'], 'formails') !== false) {
-            $results['FORMAILS_ID_FOUND'] = ['id' => $id, 'info' => $info];
+    $r = ph("/hosting/emails?id=$id");
+    if ($r['http'] !== 200 || !isset($r['body']['success']) || !$r['body']['success']) continue;
+
+    $data   = $r['body']['data'] ?? [];
+    $domain = $data[0]['domain'] ?? ($data[0]['email'] ? explode('@', $data[0]['email'])[1] : 'empty');
+    $count  = count($data);
+    $all_found[$id] = ['domain' => $domain, 'count' => $count];
+
+    if (stripos($domain, 'formails') !== false || $count === 0) {
+        // Compte formails.fr (ou compte vide = candidat)
+        $results['CANDIDATE'] = ['id' => $id, 'domain' => $domain, 'emails' => $count, 'sample' => array_slice($data, 0, 2)];
+        if (stripos($domain, 'formails') !== false) {
+            $formails_id = $id;
+            $results['FORMAILS_ID_FOUND'] = $id;
             break;
         }
-        if (microtime(true) - $t0 > 75) break;
+    }
+
+    if (microtime(true) - $t0 > 100) {
+        $results['stopped_at'] = $id;
+        break;
     }
 }
 
-// ── Phase 3 : pin-point final (pas 1) ─────────────────────
-if (isset($results['FORMAILS_ID_FOUND']) && !is_array($results['FORMAILS_ID_FOUND']['id'] ?? null)) {
-    $approx = $results['FORMAILS_ID_FOUND']['id'];
-    for ($id = max(1, $approx - 1000); $id <= $approx + 1000; $id++) {
-        if (in_array($id, $known)) continue;
-        $info = check_id($id);
-        if ($info && stripos($info['domain'], 'formails') !== false) {
-            $results['FORMAILS_ID_EXACT'] = ['id' => $id, 'info' => $info];
-            break;
+$results['all_accounts_found'] = $all_found;
+$results['elapsed_s']          = round(microtime(true) - $t0, 1);
+$results['range_scanned']      = '112500-115500 step 1';
+
+if (!$formails_id && empty($all_found)) {
+    // Aucun compte trouvé dans ce range — essayer plage 2
+    $results['note'] = 'Aucun compte dans 112500-115500. Formails.fr pourrait etre dans un autre range (serveur node19-ca different). Ajoutez ?range=2 pour scanner 50000-80000.';
+
+    if (isset($_GET['range']) && $_GET['range'] === '2') {
+        $results['range2_scan'] = 'scanning 50000-80000 step 2...';
+        $found2 = [];
+        for ($id = 50000; $id <= 80000; $id += 2) {
+            if (in_array($id, $known)) continue;
+            $r = ph("/hosting/emails?id=$id");
+            if ($r['http'] === 200 && isset($r['body']['success']) && $r['body']['success']) {
+                $data  = $r['body']['data'] ?? [];
+                $dom   = $data[0]['domain'] ?? 'empty';
+                $found2[$id] = ['domain' => $dom, 'count' => count($data)];
+                if (stripos($dom, 'formails') !== false) {
+                    $results['FORMAILS_ID_FOUND'] = $id;
+                    break;
+                }
+            }
+            if (microtime(true) - $t0 > 110) { $results['range2_stopped_at'] = $id; break; }
         }
-        if (microtime(true) - $t0 > 95) break;
+        $results['range2_accounts'] = $found2;
+        $results['elapsed_s']       = round(microtime(true) - $t0, 1);
     }
 }
-
-$results['zero_email_accounts'] = $zero_cands;
-$results['elapsed_s']           = round(microtime(true) - $t0, 1);
 
 echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
