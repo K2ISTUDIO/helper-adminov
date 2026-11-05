@@ -1,0 +1,27 @@
+name: Deploy Landing to formails.fr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/deploy-landing.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy landing page via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:   node19-ca.n0c.com
+          username: deploy@formails.fr
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir:  ./landing/
+          server-dir: public_html/
+          include: |
+            index.html
+          log-level: verbose
+          force-upload: true
