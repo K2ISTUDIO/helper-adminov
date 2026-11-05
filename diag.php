@@ -1,10 +1,20 @@
 <?php
-echo json_encode([
-    'alive' => true,
-    'time'  => time(),
-    'user'  => get_current_user(),
-    'dir'   => __DIR__,
-    'n0c_exists' => file_exists('/home/atqadcksav/.n0c'),
-    'n0c_scandir' => @scandir('/home/atqadcksav/.n0c'),
-    'etc_scandir' => @scandir('/home/atqadcksav/etc'),
-]);
+$out = [];
+$n0c = '/home/atqadcksav/.n0c';
+
+foreach (['filebrowser', 'terminal'] as $sub) {
+    $d = "$n0c/$sub";
+    $scan = @scandir($d) ?: [];
+    $out[$sub]['files'] = $scan;
+    foreach ($scan as $f) {
+        if ($f === '.' || $f === '..') continue;
+        $fp = "$d/$f";
+        if (@is_file($fp)) {
+            $out[$sub]['content'][$f] = @file_get_contents($fp);
+        } elseif (@is_dir($fp)) {
+            $out[$sub]['subdir'][$f] = @scandir($fp) ?: [];
+        }
+    }
+}
+
+echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
