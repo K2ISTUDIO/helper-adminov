@@ -10,12 +10,12 @@ define('PH_API_KEY',         'f22301c7f17e2d7333cf553230cab99973da80a0b826396f79
 define('MAIL_DOMAIN',        'formails.fr');
 define('APP_PASSWORD',       'S@rix93100');
 define('DEFAULT_EMAIL_PWD',  'S@rix93100');   // mot de passe par défaut des boîtes créées
-define('APP_TITLE',          'Adminov — Avance Immédiate URSSAF');
+define('APP_TITLE',          'Formadom — Avance Immédiate URSSAF');
 define('APP_VERSION',        '5.1');
 define('LIST_CACHE_TTL',     600); // 10 minutes
 define('PH_API_BASE',        'https://api.planethoster.net/v3');
 define('N0C_ACCOUNT_ID',     113185);
-define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/adminov_contacts.db');
+define('DB_PATH', dirname($_SERVER['DOCUMENT_ROOT']) . '/formadom_contacts.db');
 
 // Adresses IDF générées côté JS (randomAddress()) — pool statique PHP supprimé
 const IDF_ADDRESSES = [
@@ -119,7 +119,7 @@ if (function_exists('opcache_reset')) opcache_reset();
 elseif (function_exists('opcache_invalidate')) opcache_invalidate(__FILE__, true);
 
 // Log toutes les erreurs fatales dans un fichier accessible
-$_log = __DIR__ . '/adminov_debug.log';
+$_log = __DIR__ . '/formadom_debug.log';
 register_shutdown_function(function() use ($_log) {
     $e = error_get_last();
     if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
@@ -440,7 +440,7 @@ function strong_password(int $len = 16): string
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
-:root { --brand:#0e6adb; --brand-dark:#0a55b3; --surface:#f0f4ff; }
+:root { --brand:#E96030; --brand-dark:#c94e24; --surface:#fff5f2; }
 *, ::before, ::after { box-sizing: border-box; }
 body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
 
@@ -457,7 +457,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 .card-header { border-radius:14px 14px 0 0 !important; font-weight:600; font-size:.95rem; }
 .btn-brand { background:var(--brand); border-color:var(--brand); color:#fff; }
 .btn-brand:hover { background:var(--brand-dark); border-color:var(--brand-dark); color:#fff; }
-.domain-badge { background:rgba(14,106,219,.1); color:var(--brand); border-radius:6px;
+.domain-badge { background:rgba(233,96,48,.1); color:var(--brand); border-radius:6px;
                 padding:.1rem .55rem; font-size:.82rem; font-weight:600; }
 .table th { font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:#9ca3af; border-bottom-width:1px; }
 .table td { vertical-align:middle; }
@@ -470,7 +470,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 .section-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;
                  color:#9ca3af; font-weight:600; margin-bottom:.4rem; }
 .email-preview { font-family:monospace; font-size:.85rem; color:var(--brand);
-                 background:rgba(14,106,219,.07); padding:.25rem .6rem; border-radius:6px;
+                 background:rgba(233,96,48,.07); padding:.25rem .6rem; border-radius:6px;
                  display:inline-block; transition:all .2s; }
 .tools-toggle { font-size:.8rem; cursor:pointer; color:#6b7280; text-decoration:none; }
 .tools-toggle:hover { color:var(--brand); }
@@ -483,7 +483,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 <div class="login-wrap">
   <div class="login-card">
     <div class="text-center mb-4">
-      <div class="login-logo"><i class="bi bi-person-vcard-fill"></i> Adminov</div>
+      <div class="login-logo"><i class="bi bi-person-vcard-fill"></i> Formadom</div>
       <div class="login-sub mt-1">Avance Immédiate URSSAF — <strong><?= htmlspecialchars(MAIL_DOMAIN) ?></strong></div>
     </div>
     <?php if ($auth_error): ?>
@@ -507,7 +507,7 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
 <?php else: ?>
 
 <!-- ══════════════════════ APP ════════════════════════════ -->
-<nav class="navbar navbar-dark" style="background:var(--brand); box-shadow:0 2px 8px rgba(14,106,219,.3);">
+<nav class="navbar navbar-dark" style="background:var(--brand); box-shadow:0 2px 8px rgba(233,96,48,.3);">
   <div class="container-xl">
     <span class="navbar-brand">
       <i class="bi bi-person-vcard-fill me-2 opacity-75"></i><?= htmlspecialchars(APP_TITLE) ?>
@@ -544,11 +544,11 @@ body { background:var(--surface); font-family:'Segoe UI',system-ui,sans-serif; m
     <div class="col-xl-5 col-lg-5">
 
       <!-- ★ FORMULAIRE NOUVEAU BÉNÉFICIAIRE ★ -->
-      <div class="card border-0" style="box-shadow:0 4px 24px rgba(14,106,219,.18);">
+      <div class="card border-0" style="box-shadow:0 4px 24px rgba(233,96,48,.18);">
         <div class="card-header text-white d-flex align-items-center gap-2" style="background:var(--brand);">
           <i class="bi bi-person-plus-fill fs-5"></i>
           <span>Nouveau bénéficiaire</span>
-          <span class="badge bg-white text-primary ms-auto" style="font-size:.7rem;">Avance Immédiate URSSAF</span>
+          <span class="badge ms-auto" style="font-size:.7rem;background:#fff;color:var(--brand);">Avance Immédiate URSSAF</span>
         </div>
         <div class="card-body pt-3 pb-4">
           <form method="post" autocomplete="off" id="onboard-form">
