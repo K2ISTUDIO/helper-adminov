@@ -1,55 +1,38 @@
 <?php
+error_reporting(0);
+ob_start();
 header('Content-Type: application/json');
+
 $out = [];
+$n0c = '/home/atqadcksav/.n0c';
 
-$home = '/home/atqadcksav';
-$n0c  = $home . '/.n0c';
+$out['exists']   = (bool)@file_exists($n0c);
+$out['is_dir']   = (bool)@is_dir($n0c);
+$out['readable'] = (bool)@is_readable($n0c);
 
-// Permissions du dossier .n0c
-$out['n0c_exists']     = file_exists($n0c);
-$out['n0c_is_dir']     = is_dir($n0c);
-$out['n0c_readable']   = is_readable($n0c);
-$out['n0c_perms']      = decoct(fileperms($n0c) & 0777);
-
-// Contenu de .n0c via scandir (sans récursion)
 $scan = @scandir($n0c);
-$out['n0c_scandir'] = $scan ?: 'inaccessible';
+$out['scandir'] = is_array($scan) ? $scan : 'failed';
 
-// Lire chaque fichier dans .n0c
 if (is_array($scan)) {
     foreach ($scan as $f) {
         if ($f === '.' || $f === '..') continue;
         $fp = "$n0c/$f";
-        $out['n0c_contents'][$f] = [
-            'type'     => is_dir($fp) ? 'dir' : 'file',
-            'readable' => is_readable($fp),
-            'size'     => @filesize($fp),
-            'content'  => is_file($fp) && is_readable($fp) ? substr(@file_get_contents($fp), 0, 500) : null,
-        ];
-        // Si sous-répertoire, lister aussi
-        if (is_dir($fp)) {
-            $sub = @scandir($fp);
-            $out['n0c_contents'][$f]['children'] = $sub ?: [];
-            foreach ((array)$sub as $sf) {
+        $t  = @is_dir($fp) ? 'dir' : 'file';
+        $c  = ($t === 'file') ? @file_get_contents($fp) : null;
+        $out['files'][$f] = ['type' => $t, 'content' => $c ? substr($c, 0, 500) : null];
+        if ($t === 'dir') {
+            $sub = @scandir($fp) ?: [];
+            foreach ($sub as $sf) {
                 if ($sf === '.' || $sf === '..') continue;
-                $sfp = "$fp/$sf";
-                if (is_file($sfp) && is_readable($sfp)) {
-                    $out['n0c_contents'][$f]['files'][$sf] = substr(@file_get_contents($sfp), 0, 300);
-                }
+                $c2 = @file_get_contents("$fp/$sf");
+                $out['files'][$f]['sub'][$sf] = $c2 ? substr($c2, 0, 300) : null;
             }
         }
     }
 }
 
-// Cherche aussi dans etc/
-$etc = $home . '/etc';
-if (is_dir($etc)) {
-    $out['home_etc'] = @scandir($etc) ?: [];
-    foreach ($out['home_etc'] as $f) {
-        if ($f === '.' || $f === '..') continue;
-        $fp = "$etc/$f";
-        if (is_file($fp)) $out['home_etc_files'][$f] = substr(@file_get_contents($fp), 0, 200);
-    }
-}
+// Aussi: home etc/
+$out['etc'] = @scandir('/home/atqadcksav/etc') ?: 'nope';
 
+ob_end_clean();
 echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
