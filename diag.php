@@ -23,6 +23,7 @@ $out['v3_world_hostings']   = ph("https://api.planethoster.net/v3/the-world/host
 $out['v3_world_info']       = ph("https://api.planethoster.net/v3/the-world/info", $api_user, $api_key);
 $out['v4_hostings']         = ph("https://api.planethoster.net/v4/hostings", $api_user, $api_key);
 $out['v4_world_hostings']   = ph("https://api.planethoster.net/v4/the-world/hostings", $api_user, $api_key);
+$out['v4_world_info']       = ph("https://api.planethoster.net/v4/the-world/info", $api_user, $api_key);
 
 // Also try with formails.fr as domain param (v3)
 $out['v3_domain_formails']  = ph("https://api.planethoster.net/v3/hosting/info?domain=formails.fr", $api_user, $api_key);
