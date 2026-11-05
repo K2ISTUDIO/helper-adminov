@@ -1,49 +1,48 @@
 <?php
 header('Content-Type: application/json');
+set_time_limit(120);
 
 $out = [];
+$home = '/home/atqadcksav';
+$user = 'atqadcksav';
+$out['uid'] = 1687;
 
-// Infos serveur / environnement
-$out['server_name']     = $_SERVER['SERVER_NAME'] ?? 'n/a';
-$out['document_root']   = $_SERVER['DOCUMENT_ROOT'] ?? 'n/a';
-$out['home']            = getenv('HOME') ?: 'n/a';
-$out['user']            = get_current_user();
-$out['php_user']        = function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid()) : 'posix_n/a';
-
-// Essai lecture de fichiers N0C
+// Lecture fichiers config N0C / cPanel
 $candidates = [
     '/etc/trueuserdomains',
     '/etc/userdomains',
-    '/etc/trueuserowners',
-    getenv('HOME') . '/.cpanel/json-api/userid',
-    getenv('HOME') . '/.cpanel/nvdata/userid',
-    '/var/cpanel/users/' . get_current_user(),
-    getenv('HOME') . '/.my.cnf',
-    getenv('HOME') . '/etc/main_domain',
+    '/var/cpanel/users/' . $user,
+    $home . '/etc/main_domain',
+    $home . '/.cpanel/json-api/userid',
+    $home . '/.cpanel/nvdata/userid',
+    $home . '/.my.cnf',
+    $home . '/.n0c/account',
+    $home . '/.n0c_id',
 ];
 foreach ($candidates as $f) {
-    if (file_exists($f) && is_readable($f)) {
-        $out['files'][$f] = substr(file_get_contents($f), 0, 500);
+    if (@file_exists($f) && @is_readable($f)) {
+        $out['files'][$f] = substr(@file_get_contents($f), 0, 300);
+    } else {
+        $out['missing'][] = $f;
     }
 }
 
-// Cherche un ID numérique dans les vars d'environnement
-foreach (['CPANEL', 'USER', 'LOGNAME', 'N0C_ACCOUNT_ID', 'ACCOUNT_ID'] as $var) {
-    $v = getenv($var);
-    if ($v !== false) $out['env'][$var] = $v;
+// Liste fichiers cachés dans le home
+$hidden = @glob($home . '/.*');
+$out['home_hidden'] = $hidden ?: [];
+
+// Env vars
+foreach (array_keys($_SERVER) as $k) {
+    if (preg_match('/id|cpanel|n0c|account/i', $k)) {
+        $out['env'][$k] = $_SERVER[$k];
+    }
 }
 
-// API N0C depuis le serveur lui-même (IP whitelist)
+// API v3 - endpoints listing/reseller (peut-être sans ID)
 $api_user = 'ca090d4c75f80521945812f3968b3df9';
 $api_key  = 'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859';
 
-// Recherche par username N0C via v3
-$username = get_current_user();  // 'atqadcksav'
-foreach ([
-    "/v3/hosting/emails?username=$username",
-    "/v3/n0c-account?username=$username",
-    "/v3/hosting/info?username=$username",
-] as $ep) {
+function ph1($ep, $api_user, $api_key) {
     $ch = curl_init("https://api.planethoster.net$ep");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -56,7 +55,26 @@ foreach ([
     $r = curl_exec($ch);
     $h = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    $out['api_by_username'][$ep] = ['http' => $h, 'body' => json_decode($r, true) ?? $r];
+    return ['http' => $h, 'body' => json_decode($r, true) ?? $r];
+}
+
+// On attend 65 secondes pour laisser le rate limit se réinitialiser
+sleep(65);
+
+// Maintenant on a 10 requêtes disponibles
+$endpoints = [
+    '/v3/reseller/accounts',
+    '/v3/reseller/n0c-accounts',
+    '/v3/hosting/list',
+    "/v3/hosting/emails?username=$user",
+    "/v3/hosting/account?username=$user",
+    "/v3/n0c-hosting?username=$user",
+];
+foreach ($endpoints as $ep) {
+    $r = ph1($ep, $api_user, $api_key);
+    $out['api'][$ep] = $r;
+    // Si on trouve un compte, on s'arrête
+    if (isset($r['body']['id']) || isset($r['body']['accounts'])) break;
 }
 
 echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
