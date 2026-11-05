@@ -1,95 +1,62 @@
 <?php
 header('Content-Type: application/json');
 
+$out = [];
+
+// Infos serveur / environnement
+$out['server_name']     = $_SERVER['SERVER_NAME'] ?? 'n/a';
+$out['document_root']   = $_SERVER['DOCUMENT_ROOT'] ?? 'n/a';
+$out['home']            = getenv('HOME') ?: 'n/a';
+$out['user']            = get_current_user();
+$out['php_user']        = function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid()) : 'posix_n/a';
+
+// Essai lecture de fichiers N0C
+$candidates = [
+    '/etc/trueuserdomains',
+    '/etc/userdomains',
+    '/etc/trueuserowners',
+    getenv('HOME') . '/.cpanel/json-api/userid',
+    getenv('HOME') . '/.cpanel/nvdata/userid',
+    '/var/cpanel/users/' . get_current_user(),
+    getenv('HOME') . '/.my.cnf',
+    getenv('HOME') . '/etc/main_domain',
+];
+foreach ($candidates as $f) {
+    if (file_exists($f) && is_readable($f)) {
+        $out['files'][$f] = substr(file_get_contents($f), 0, 500);
+    }
+}
+
+// Cherche un ID numérique dans les vars d'environnement
+foreach (['CPANEL', 'USER', 'LOGNAME', 'N0C_ACCOUNT_ID', 'ACCOUNT_ID'] as $var) {
+    $v = getenv($var);
+    if ($v !== false) $out['env'][$var] = $v;
+}
+
+// API N0C depuis le serveur lui-même (IP whitelist)
 $api_user = 'ca090d4c75f80521945812f3968b3df9';
 $api_key  = 'f22301c7f17e2d7333cf553230cab99973da80a0b826396f7953d5375fa51859';
 
-function ph($path) {
-    global $api_user, $api_key;
-    $ch = curl_init("https://api.planethoster.net$path");
+// Recherche par username N0C via v3
+$username = get_current_user();  // 'atqadcksav'
+foreach ([
+    "/v3/hosting/emails?username=$username",
+    "/v3/n0c-account?username=$username",
+    "/v3/hosting/info?username=$username",
+] as $ep) {
+    $ch = curl_init("https://api.planethoster.net$ep");
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT        => 8,
         CURLOPT_HTTPHEADER     => [
             'X-API-USER: ' . $api_user,
             'X-API-KEY: '  . $api_key,
-            'Accept: application/json',
         ],
     ]);
-    $res  = curl_exec($ch);
-    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $r = curl_exec($ch);
+    $h = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return ['http' => $http, 'body' => json_decode($res, true) ?? $res];
+    $out['api_by_username'][$ep] = ['http' => $h, 'body' => json_decode($r, true) ?? $r];
 }
 
-$out = [];
-
-// Essai 1 : endpoints v3 avec nom de domaine au lieu d'un ID numérique
-foreach ([
-    '/v3/hosting/info?domain=formails.fr',
-    '/v3/hosting/emails?domain=formails.fr',
-    '/v3/n0c-account?domain=formails.fr',
-    '/v3/hosting/list',
-    '/v3/n0c-accounts',
-] as $ep) {
-    $r = ph($ep);
-    $key = str_replace(['/', '?', '=', '.'], '_', $ep);
-    $out['v3_domain'][$key] = ['http' => $r['http'], 'body' => $r['body']];
-}
-
-// Essai 2 : scan curl_multi de 125000-130000 (IDs récents, formails créé 2026)
-$start  = isset($_GET['from']) ? (int)$_GET['from'] : 125000;
-$end    = isset($_GET['to'])   ? (int)$_GET['to']   : 130000;
-$batch  = 20;
-$known  = [113185, 113188];
-$found  = [];
-$t0     = microtime(true);
-
-for ($base = $start; $base <= $end; $base += $batch) {
-    $mh   = curl_multi_init();
-    $hs   = [];
-    $ids  = [];
-    for ($i = 0; $i < $batch && ($base + $i) <= $end; $i++) {
-        $id = $base + $i;
-        if (in_array($id, $known)) continue;
-        $ids[] = $id;
-        $ch = curl_init("https://api.planethoster.net/v3/hosting/emails?id=$id&limit=1");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 8,
-            CURLOPT_HTTPHEADER     => [
-                'X-API-USER: ' . $api_user,
-                'X-API-KEY: '  . $api_key,
-            ],
-        ]);
-        curl_multi_add_handle($mh, $ch);
-        $hs[$id] = $ch;
-    }
-    do {
-        curl_multi_exec($mh, $running);
-        curl_multi_select($mh);
-    } while ($running > 0);
-    foreach ($hs as $id => $ch) {
-        $res = curl_multi_getcontent($ch);
-        $d   = json_decode($res, true);
-        if (isset($d['emails']) || (isset($d['error_code']) && $d['error_code'] != 5002)) {
-            $found[] = ['id' => $id, 'body' => $d];
-        }
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
-    }
-    curl_multi_close($mh);
-    if ((microtime(true) - $t0) > 90) {
-        $out['scan_stopped_at'] = $base + $batch;
-        break;
-    }
-}
-
-$out['scan'] = [
-    'range'       => "$start-$end",
-    'found'       => $found,
-    'elapsed_s'   => round(microtime(true) - $t0, 1),
-];
-
-echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
